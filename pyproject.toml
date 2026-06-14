@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "memoryledger"
+version = "0.1.0"
+description = "Auditable long-term project memory ledger for coding agents"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [
+  { name = "memoryledger" },
+]
+dependencies = [
+  "ledgercore",
+  "typer",
+  "pydantic>=2",
+  "tomli; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "ruff",
+  "mypy",
+]
+
+[project.scripts]
+memoryledger = "memoryledger.cli:app"
+memledger = "memoryledger.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/memoryledger"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/memoryledger", "README.md"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = ["I", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+packages = ["memoryledger"]
+
+[[tool.mypy.overrides]]
+module = "ledgercore.*"
+ignore_missing_imports = true
