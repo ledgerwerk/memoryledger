@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["memoryledger*"]
+
+[tool.setuptools.package-data]
+memoryledger = ["py.typed"]
+
+[project]
+name = "memoryledger"
+description = "Auditable long-term project memory ledger and AGENTS.md renderer"
+requires-python = ">=3.10"
+readme = "README.md"
+license = "Apache-2.0"
+dependencies = [
+    "typer",
+    "ledgercore>=0.2,<0.3",
+    "PyYAML",
+    'tomli; python_version < "3.11"',
+]
+dynamic = ["version"]
+
+[project.scripts]
+memoryledger = "memoryledger.launcher:main"
+memledger = "memoryledger.launcher:main"
+
+[project.optional-dependencies]
+dev = [
+    "build",
+    "mypy",
+    "pytest",
+    "pytest-xdist",
+    "ruff",
+    "twine",
+    "types-PyYAML",
+]
+
+[tool.setuptools_scm]
+write_to = "memoryledger/_version.py"
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff.lint]
+ignore = ["E501", "B008", "B007"]
