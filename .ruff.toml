@@ -10,6 +10,7 @@ extend-select = [
     "I",  # isort
     "UP",  # pyupgrade
 ]
+ignore = ["E501", "B008", "B007"]
 exclude = ["setup/*", "notebooks/*"]
 
 [format]

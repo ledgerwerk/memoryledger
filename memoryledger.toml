@@ -1,0 +1,26 @@
+[ledger]
+code = "ml"
+name = "memoryledger"
+
+[project]
+name = "memoryledger"
+uuid = "54158654-ca08-4e84-a2ac-a71346fc67d5"
+
+[storage]
+memoryledger_dir = ".memoryledger"
+
+[render]
+root_agents_path = "AGENTS.md"
+linked_docs_dir = "docs/agents"
+nested_agents_enabled = false
+linked_docs_enabled = true
+max_root_agents_chars = 12000
+max_linked_doc_chars = 50000
+include_local = false
+include_rejected = false
+sort_order = ["rule", "procedure", "semantic", "learning", "episode", "document"]
+
+[intake]
+allow_run_html = true
+allow_current_run = true
+default_review_status = "candidate"

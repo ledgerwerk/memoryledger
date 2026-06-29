@@ -1,9 +1,9 @@
 # Project-local taskledger configuration.
 # This file lives in the source project root.
 config_version = 2
-taskledger_dir = '../taskledger-state/memoryledger'
+taskledger_dir = '../ledger/task/memoryledger'
 # Stable project identity. Commit this with your source tree.
-project_uuid = "8b05b131-5fb1-4fe7-9f93-47a17e3d4477"
+project_uuid = "efb5495e-0a3d-4173-bb5c-a0eca3c75d96"
 project_name = "memoryledger"
 
 # Taskledger branch-scoped state. This block is intentionally safe to commit.
