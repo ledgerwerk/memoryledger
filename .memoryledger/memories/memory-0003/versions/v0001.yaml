@@ -1,0 +1,15 @@
+memory:
+  id: memory-0003
+  kind: rule
+  title: Communication
+  status: candidate
+  priority: 100
+  scope: global
+  scope_path: ""
+  render_target: root_agents
+  source: cli
+  created_at: "2026-06-29T13:07:57Z"
+  updated_at: "2026-06-29T13:07:57Z"
+  version: 1
+  tags: []
+reason: created

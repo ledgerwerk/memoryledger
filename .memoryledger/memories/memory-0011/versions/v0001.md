@@ -1,0 +1,9 @@
+- Follow existing style first.
+- Keep functions focused.
+- Prefer explicit names over clever compression.
+- Add type hints for new or changed public functions.
+- Keep public error codes stable unless explicitly changing the contract.
+- Avoid new dependencies unless explicitly requested.
+- Do not reformat unrelated files.
+- Do not rename public symbols without a strong reason.
+- Do not use git commands that create commits or rewrite history.
