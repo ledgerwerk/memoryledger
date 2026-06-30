@@ -1,0 +1,10 @@
+[ledger]
+code = "pl"
+name = "planledger"
+
+[project]
+name = "memoryledger"
+uuid = "81a58a13-2cc2-4b34-aea8-9eb4f57a2a0f"
+
+[storage]
+planledger_dir = "../ledger/plan/memoryledger"

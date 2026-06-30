@@ -14,7 +14,8 @@ from ledgercore.atomic import atomic_write_text
 from ledgercore.time import utc_now_iso
 
 from .errors import MemoryledgerError
-from .models import Config, Memory, RenderConfig
+from .guardrails import confined_path, validate_memory, validate_scope_path
+from .models import Config, EvidenceRef, Memory, RenderConfig, TemplatePolicy
 
 CONFIG_NAMES = ("memoryledger.toml", ".memoryledger.toml")
 
@@ -84,7 +85,7 @@ def load_config(start: Path | None = None) -> Config:
             if k in RenderConfig.__dataclass_fields__
         }
     )
-    return Config(
+    config = Config(
         root=path.parent,
         config_path=path,
         ledger_code=data.get("ledger", {}).get("code", "ml"),
@@ -100,7 +101,35 @@ def load_config(start: Path | None = None) -> Config:
         default_review_status=data.get("intake", {}).get(
             "default_review_status", "candidate"
         ),
+        template_policy=TemplatePolicy(
+            enabled=bool(data.get("template_policy", {}).get("enabled", False)),
+            ids=[
+                str(value)
+                for value in data.get("template_policy", {}).get("ids", [])
+            ],
+        ),
     )
+    confined_path(config.root, config.memoryledger_dir, label="memoryledger_dir")
+    confined_path(
+        config.root,
+        config.render.root_agents_path,
+        code="INVALID_OUTPUT_PATH",
+        label="root_agents_path",
+    )
+    confined_path(
+        config.root,
+        config.render.linked_docs_dir,
+        code="INVALID_OUTPUT_PATH",
+        label="linked_docs_dir",
+    )
+    if config.render.evidence_index_path:
+        confined_path(
+            config.root,
+            config.render.evidence_index_path,
+            code="INVALID_OUTPUT_PATH",
+            label="evidence_index_path",
+        )
+    return config
 
 
 def init_workspace(
@@ -181,10 +210,49 @@ class Store:
         scope_path: str,
         render_target: str,
         source: str = "cli",
+        *,
+        origin: str = "",
+        origin_hash: str = "",
+        section: str = "",
+        evidence_refs: list[EvidenceRef] | None = None,
+    ) -> Memory:
+        memory = self.validate_new(
+            kind,
+            title,
+            content,
+            evidence,
+            scope,
+            scope_path,
+            render_target,
+            source,
+            origin=origin,
+            origin_hash=origin_hash,
+            section=section,
+            evidence_refs=evidence_refs,
+        )
+        memory = replace(memory, id=self.next_id())
+        self.write(memory, content, evidence, "created")
+        return memory
+
+    def validate_new(
+        self,
+        kind: str,
+        title: str,
+        content: str,
+        evidence: str,
+        scope: str,
+        scope_path: str,
+        render_target: str,
+        source: str = "cli",
+        *,
+        origin: str = "",
+        origin_hash: str = "",
+        section: str = "",
+        evidence_refs: list[EvidenceRef] | None = None,
     ) -> Memory:
         now = utc_now_iso()
         memory = Memory(
-            self.next_id(),
+            "memory-pending",
             kind,
             title,
             "candidate",
@@ -197,11 +265,18 @@ class Store:
             now,
             1,
             [],
+            origin,
+            origin_hash,
+            section,
+            evidence_refs or [],
         )
-        self.write(memory, content, evidence, "created")
+        validate_scope_path(self.config.root, scope_path)
+        validate_memory(memory, content, evidence, self.config.root)
         return memory
 
     def write(self, memory: Memory, content: str, evidence: str, reason: str) -> None:
+        validate_scope_path(self.config.root, memory.scope_path)
+        validate_memory(memory, content, evidence, self.config.root)
         mdir = self.memory_dir(memory.id)
         (mdir / "versions").mkdir(parents=True, exist_ok=True)
         atomic_write_text(mdir / "memory.yaml", _dump_yaml(memory.to_dict()))
@@ -212,14 +287,32 @@ class Store:
         version = f"v{memory.version:04d}"
         atomic_write_text(
             mdir / "versions" / f"{version}.yaml",
-            _dump_yaml({"memory": memory.to_dict(), "reason": reason}),
+            _dump_yaml(
+                {"memory": memory.to_dict(), "reason": reason, "evidence": evidence}
+            ),
         )
         atomic_write_text(mdir / "versions" / f"{version}.md", content.rstrip() + "\n")
 
     def update_status(self, memory_id: str, status: str, reason: str) -> Memory:
         old = self.get(memory_id)
+        refs = old.evidence_refs
+        if status == "accepted":
+            refs = [
+                *refs,
+                EvidenceRef(
+                    kind="user_approval",
+                    title="Review approval",
+                    uri=f"memory:{memory_id}#review-v{old.version + 1:04d}",
+                    excerpt=reason,
+                    timestamp=utc_now_iso(),
+                ),
+            ]
         new = replace(
-            old, status=status, updated_at=utc_now_iso(), version=old.version + 1
+            old,
+            status=status,
+            evidence_refs=refs,
+            updated_at=utc_now_iso(),
+            version=old.version + 1,
         )
         self.write(
             new,
@@ -230,7 +323,12 @@ class Store:
         return new
 
     def update_content(
-        self, memory_id: str, content: str, reason: str, append: bool = False
+        self,
+        memory_id: str,
+        content: str,
+        reason: str,
+        append: bool = False,
+        section: str | None = None,
     ) -> Memory:
         old = self.get(memory_id)
         body = (
@@ -238,8 +336,28 @@ class Store:
             if append
             else content.rstrip() + "\n"
         )
-        new = replace(old, updated_at=utc_now_iso(), version=old.version + 1)
+        new = replace(
+            old,
+            section=old.section if section is None else section,
+            updated_at=utc_now_iso(),
+            version=old.version + 1,
+        )
         self.write(new, body, self.read_evidence(memory_id), reason)
+        return new
+
+    def add_evidence(
+        self, memory_id: str, evidence: EvidenceRef, reason: str
+    ) -> Memory:
+        if not reason.strip():
+            raise MemoryledgerError("MISSING_REASON", "evidence changes require a reason")
+        old = self.get(memory_id)
+        new = replace(
+            old,
+            evidence_refs=[*old.evidence_refs, evidence],
+            updated_at=utc_now_iso(),
+            version=old.version + 1,
+        )
+        self.write(new, self.read_content(memory_id), self.read_evidence(memory_id), reason)
         return new
 
     def next_import_id(self) -> str:

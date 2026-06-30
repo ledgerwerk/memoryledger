@@ -8,25 +8,41 @@ from pathlib import Path
 import typer
 
 from . import __version__
+from .adopt import adopt, parse_markdown
 from .errors import MemoryledgerError
+from .evidence_scan import apply as apply_scan
+from .evidence_scan import scan as scan_evidence
 from .guardrails import validate_memory, validate_scope_path
 from .intake import import_run_html as intake_run_html
 from .intake import import_text as intake_text
-from .models import KINDS, RENDER_TARGETS, SCOPES, Config
+from .models import EVIDENCE_KINDS, KINDS, RENDER_TARGETS, SCOPES, Config, EvidenceRef
 from .render import export as export_rendered
 from .render import render_all, write_rendered
 from .review import transition
 from .storage import Store, find_config, init_workspace, load_config
+from .templates import (
+    apply_template,
+    find_template,
+    load_global_config,
+    remove_template,
+    template_content,
+)
 
 app = typer.Typer(no_args_is_help=True)
 memory_app = typer.Typer(no_args_is_help=True)
+evidence_app = typer.Typer(no_args_is_help=True)
 review_app = typer.Typer(no_args_is_help=True)
 import_app = typer.Typer(no_args_is_help=True)
 agents_app = typer.Typer(no_args_is_help=True)
+templates_app = typer.Typer(no_args_is_help=True)
+scan_app = typer.Typer(no_args_is_help=True)
 app.add_typer(memory_app, name="memory")
+memory_app.add_typer(evidence_app, name="evidence")
 app.add_typer(review_app, name="review")
 app.add_typer(import_app, name="import")
 app.add_typer(agents_app, name="agents")
+app.add_typer(templates_app, name="templates")
+app.add_typer(scan_app, name="evidence")
 
 
 def _json(data: object) -> None:
@@ -163,6 +179,7 @@ def memory_create(
     scope: str = typer.Option("global", "--scope"),
     scope_path: str = typer.Option("", "--scope-path"),
     render_target: str = typer.Option("root_agents", "--render-target"),
+    section: str = typer.Option("", "--section"),
 ) -> None:
     try:
         if (
@@ -177,9 +194,15 @@ def memory_create(
         validate_scope_path(config.root, scope_path)
         content = _read_input(text, file, stdin)
         memory = store.create(
-            kind, title, content, evidence, scope, scope_path, render_target
+            kind,
+            title,
+            content,
+            evidence,
+            scope,
+            scope_path,
+            render_target,
+            section=section,
         )
-        validate_memory(memory, content, evidence)
         typer.echo(memory.id)
     except Exception as exc:
         _handle_error(exc)
@@ -250,10 +273,13 @@ def memory_edit(
     text: str | None = typer.Option(None, "--text"),
     file: Path | None = typer.Option(None, "--file"),
     stdin: bool = typer.Option(False, "--stdin"),
+    section: str | None = typer.Option(None, "--section"),
 ) -> None:
     try:
         _config, store = _load()
-        memory = store.update_content(memory_id, _read_input(text, file, stdin), reason)
+        memory = store.update_content(
+            memory_id, _read_input(text, file, stdin), reason, section=section
+        )
         typer.echo(f"{memory.id} v{memory.version:04d}")
     except Exception as exc:
         _handle_error(exc)
@@ -285,7 +311,10 @@ def memory_validate(
         _config, store = _load()
         memory = store.get(memory_id)
         validate_memory(
-            memory, store.read_content(memory_id), store.read_evidence(memory_id)
+            memory,
+            store.read_content(memory_id),
+            store.read_evidence(memory_id),
+            store.config.root,
         )
         if json_output:
             _json({"ok": True, "memory_id": memory_id})
@@ -324,6 +353,58 @@ def memory_diff(
         a = (base / f"{from_version}.md").read_text().splitlines()
         b = (base / f"{to}.md").read_text().splitlines()
         typer.echo("\n".join(difflib.unified_diff(a, b, from_version, to)))
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@evidence_app.command("list")
+def evidence_list(
+    memory_id: str, json_output: bool = typer.Option(False, "--json")
+) -> None:
+    try:
+        _config, store = _load()
+        refs = [ref.to_dict() for ref in store.get(memory_id).evidence_refs]
+        if json_output:
+            _json({"memory_id": memory_id, "evidence": refs})
+        else:
+            for ref in refs:
+                typer.echo(f"{ref['kind']} {ref['title']} {ref['uri']}")
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@evidence_app.command("add")
+def evidence_add(
+    memory_id: str,
+    kind: str = typer.Option(..., "--kind"),
+    title: str = typer.Option(..., "--title"),
+    uri: str = typer.Option(..., "--uri"),
+    reason: str = typer.Option(..., "--reason"),
+    excerpt: str = typer.Option("", "--excerpt"),
+    line_start: int | None = typer.Option(None, "--line-start"),
+    line_end: int | None = typer.Option(None, "--line-end"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    try:
+        if kind not in EVIDENCE_KINDS:
+            raise MemoryledgerError("INVALID_EVIDENCE_KIND", kind)
+        _config, store = _load()
+        memory = store.add_evidence(
+            memory_id,
+            EvidenceRef(
+                kind=kind,
+                title=title,
+                uri=uri,
+                excerpt=excerpt,
+                line_start=line_start,
+                line_end=line_end,
+            ),
+            reason,
+        )
+        data = {"memory_id": memory.id, "version": memory.version}
+        _json(data) if json_output else typer.echo(
+            f"{memory.id} v{memory.version:04d}"
+        )
     except Exception as exc:
         _handle_error(exc)
 
@@ -408,6 +489,162 @@ def agents_render(json_output: bool = typer.Option(False, "--json")) -> None:
 @agents_app.command("export")
 def agents_export(json_output: bool = typer.Option(False, "--json")) -> None:
     export(json_output=json_output)
+
+
+@agents_app.command("adopt")
+def agents_adopt(
+    target: Path = typer.Argument(Path("AGENTS.md")),
+    apply: bool = typer.Option(False, "--apply"),
+    backup: bool = typer.Option(False, "--backup"),
+    accept: bool = typer.Option(False, "--accept"),
+    reason: str = typer.Option("", "--reason"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    try:
+        config, store = _load()
+        path = target if target.is_absolute() else config.root / target
+        try:
+            path.resolve().relative_to(config.root.resolve())
+        except ValueError as exc:
+            raise MemoryledgerError(
+                "INVALID_ADOPTION_PATH", "adoption target must be in the workspace"
+            ) from exc
+        if accept and not reason.strip():
+            raise MemoryledgerError(
+                "MISSING_REASON", "--accept requires a review reason"
+            )
+        digest, proposals = parse_markdown(path, config.root)
+        if not apply:
+            data = {
+                "target": str(path),
+                "source_hash": digest,
+                "proposals": [proposal.to_dict() for proposal in proposals],
+                "mutated": False,
+            }
+        else:
+            ids, backup_path = adopt(
+                store, path, backup=backup, accept=accept, reason=reason
+            )
+            data = {
+                "target": str(path),
+                "candidates": ids,
+                "backup": str(backup_path),
+                "mutated": True,
+            }
+        if json_output:
+            _json(data)
+        elif apply:
+            typer.echo("\n".join(ids))
+        else:
+            for proposal in proposals:
+                typer.echo(f"{proposal.kind} {proposal.title}")
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@templates_app.command("list")
+def templates_list(json_output: bool = typer.Option(False, "--json")) -> None:
+    try:
+        templates = load_global_config().templates
+        data = [
+            {"id": item.id, "version": item.version, "title": item.title}
+            for item in templates
+        ]
+        if json_output:
+            _json({"templates": data})
+        else:
+            for item in data:
+                typer.echo(f"{item['id']} {item['version']} {item['title']}")
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@templates_app.command("show")
+def templates_show(
+    template_id: str, json_output: bool = typer.Option(False, "--json")
+) -> None:
+    try:
+        template = find_template(load_global_config(), template_id)
+        data = {
+            "id": template.id,
+            "version": template.version,
+            "title": template.title,
+            "kind": template.kind,
+            "content": template_content(template),
+        }
+        _json(data) if json_output else typer.echo(data["content"], nl=False)
+    except Exception as exc:
+        _handle_error(exc)
+
+
+def _template_apply(template_id: str, json_output: bool) -> None:
+    config, store = _load()
+    if config.template_policy.ids and template_id not in config.template_policy.ids:
+        raise MemoryledgerError("TEMPLATE_NOT_ENABLED", template_id)
+    template = find_template(load_global_config(), template_id)
+    action, memory = apply_template(store, template)
+    data = {"action": action, "memory_id": memory.id, "status": memory.status}
+    _json(data) if json_output else typer.echo(f"{action} {memory.id}")
+
+
+@templates_app.command("apply")
+def templates_apply(
+    template_id: str, json_output: bool = typer.Option(False, "--json")
+) -> None:
+    try:
+        _template_apply(template_id, json_output)
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@templates_app.command("sync")
+def templates_sync(
+    template_id: str, json_output: bool = typer.Option(False, "--json")
+) -> None:
+    try:
+        _template_apply(template_id, json_output)
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@templates_app.command("remove")
+def templates_remove(
+    template_id: str,
+    reason: str = typer.Option(..., "--reason"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    try:
+        _config, store = _load()
+        memory = remove_template(store, template_id, reason)
+        data = {"memory_id": memory.id, "status": memory.status}
+        _json(data) if json_output else typer.echo(f"{memory.id} archived")
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@scan_app.command("scan")
+def evidence_scan(
+    apply_candidates: bool = typer.Option(False, "--apply-candidates"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    try:
+        config, store = _load()
+        proposals = scan_evidence(config.root)
+        results = apply_scan(store, proposals) if apply_candidates else []
+        data = {
+            "proposals": [proposal.to_dict() for proposal in proposals],
+            "applied": results,
+        }
+        if json_output:
+            _json(data)
+        elif apply_candidates:
+            for result in results:
+                typer.echo(f"{result['action']} {result['memory_id']}")
+        else:
+            for proposal in proposals:
+                typer.echo(f"{proposal.path}:{proposal.line} {proposal.observed}")
+    except Exception as exc:
+        _handle_error(exc)
 
 
 @import_app.command("text")

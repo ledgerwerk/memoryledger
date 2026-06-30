@@ -15,5 +15,5 @@ def transition(store: Store, memory_id: str, status: str, reason: str) -> Memory
     content = store.read_content(memory_id)
     evidence = store.read_evidence(memory_id) + f"\nReview reason: {reason}\n"
     if status == "accepted":
-        validate_memory(memory, content, evidence)
+        validate_memory(memory, content, evidence, store.config.root)
     return store.update_status(memory_id, status, reason)

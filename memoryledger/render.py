@@ -35,6 +35,13 @@ class RenderResult:
     nested_docs: dict[str, str]
 
 
+def _escape_markdown(value: str) -> str:
+    escaped = value.replace("\\", "\\\\")
+    for character in ("`", "[", "]", "(", ")", "*", "_"):
+        escaped = escaped.replace(character, f"\\{character}")
+    return escaped
+
+
 def _active(config: Config, memories: list[Memory]) -> list[Memory]:
     result = []
     for memory in memories:
@@ -64,7 +71,7 @@ def render_all(config: Config) -> RenderResult:
     store = Store(config)
     memories = _active(config, store.all_memories())
     linked: dict[str, list[tuple[Memory, str]]] = {}
-    root: dict[str, list[str]] = {k: [] for k in ROOT_SECTIONS}
+    root: dict[str, list[tuple[Memory, str]]] = {k: [] for k in ROOT_SECTIONS}
     nested: dict[str, list[tuple[Memory, str]]] = {}
 
     for memory in memories:
@@ -80,12 +87,44 @@ def render_all(config: Config) -> RenderResult:
         if use_link and memory.kind in DOC_MAP:
             linked.setdefault(memory.kind, []).append((memory, content))
         elif memory.kind in root:
+            evidence_comment = ""
+            if config.render.include_evidence and memory.evidence_refs:
+                evidence_comment = (
+                    f"\n<!-- memory:{memory.id}; evidence:"
+                    + ",".join(ref.kind for ref in memory.evidence_refs)
+                    + " -->"
+                )
             if memory.kind == "document":
-                root[memory.kind].append(f"- {memory.title}")
+                root[memory.kind].append(
+                    (memory, f"- {memory.title}{evidence_comment}")
+                )
             else:
-                root[memory.kind].append(_bullet(memory.title, content))
+                root[memory.kind].append(
+                    (memory, _bullet(memory.title, content) + evidence_comment)
+                )
 
     linked_docs = _render_linked(config, linked)
+    if config.render.include_evidence and config.render.evidence_index_path:
+        index_lines = [
+            "# Evidence index",
+            "",
+            GENERATED_MARKER,
+            "<!-- Source: .memoryledger; regenerate with `memoryledger render` and `memoryledger export`. -->",
+            "",
+        ]
+        for memory in memories:
+            if not memory.evidence_refs:
+                continue
+            index_lines += [f"## {memory.id} — {memory.title}", ""]
+            for ref in memory.evidence_refs:
+                index_lines.append(
+                    f"- {_escape_markdown(ref.title)} "
+                    f"(`{_escape_markdown(ref.uri)}`)"
+                )
+            index_lines.append("")
+        linked_docs[config.render.evidence_index_path] = (
+            "\n".join(index_lines).rstrip() + "\n"
+        )
     nested_docs = _render_nested(config, nested)
     root_text = _render_root(config, root, linked_docs, nested_docs)
     validate_generated_text(root_text, config.render.max_root_agents_chars)
@@ -96,7 +135,7 @@ def render_all(config: Config) -> RenderResult:
 
 def _render_root(
     config: Config,
-    sections: dict[str, list[str]],
+    sections: dict[str, list[tuple[Memory, str]]],
     linked_docs: dict[str, str],
     nested_docs: dict[str, str],
 ) -> str:
@@ -104,6 +143,7 @@ def _render_root(
         "# AGENTS.md",
         "",
         GENERATED_MARKER,
+        "<!-- Source: .memoryledger; regenerate with `memoryledger render` and `memoryledger export`. -->",
         "",
         "## Project memory policy",
         "",
@@ -113,7 +153,18 @@ def _render_root(
     for kind in config.render.sort_order:
         if kind not in ROOT_SECTIONS or not sections.get(kind):
             continue
-        lines += [f"## {ROOT_SECTIONS[kind]}", "", *sections[kind], ""]
+        items = sections[kind]
+        if any(memory.section for memory, _text in items):
+            lines += [f"## {ROOT_SECTIONS[kind]}", ""]
+            grouped: dict[str, list[str]] = {}
+            for memory, text in items:
+                grouped.setdefault(memory.section, []).append(text)
+            if grouped.get(""):
+                lines += [*grouped.pop(""), ""]
+            for section in sorted(grouped, key=str.casefold):
+                lines += [f"### {section}", "", *grouped[section], ""]
+        else:
+            lines += [f"## {ROOT_SECTIONS[kind]}", "", *(t for _m, t in items), ""]
     if linked_docs:
         lines += ["## Linked documents", ""]
         for path in sorted(linked_docs):
@@ -134,11 +185,25 @@ def _render_linked(
     docs: dict[str, str] = {}
     for kind, items in linked.items():
         title, _filename = DOC_MAP[kind]
-        lines = [f"# {title}", "", GENERATED_MARKER, ""]
+        lines = [
+            f"# {title}",
+            "",
+            GENERATED_MARKER,
+            "<!-- Source: .memoryledger; regenerate with `memoryledger render` and `memoryledger export`. -->",
+            "",
+        ]
         for memory, content in sorted(
             items, key=lambda item: (item[0].priority, item[0].id)
         ):
             lines += [f"## {memory.title}", "", content.strip(), ""]
+            if config.render.include_evidence and memory.evidence_refs:
+                lines += ["### Evidence", ""]
+                for ref in memory.evidence_refs:
+                    lines.append(
+                        f"- {_escape_markdown(ref.title)} "
+                        f"(`{_escape_markdown(ref.uri)}`)"
+                    )
+                lines.append("")
         docs[_doc_path(config, kind)] = "\n".join(lines).rstrip() + "\n"
     return docs
 
@@ -153,6 +218,7 @@ def _render_nested(
             "# AGENTS.md",
             "",
             GENERATED_MARKER,
+            "<!-- Source: .memoryledger; regenerate with `memoryledger render` and `memoryledger export`. -->",
             "",
             "## Directory memory policy",
             "",
