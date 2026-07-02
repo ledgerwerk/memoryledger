@@ -44,7 +44,8 @@ def test_structured_run_import_is_allowlisted_and_idempotent(runner, work) -> No
             runner, ["memory", "show", "memory-0001", "--content", "--json"]
         ).output
     )
-    assert "Remember to run" in shown["content"]
+    assert "use memoryledger" in shown["content"].lower()
+    assert "AGENTS.md directly" in shown["content"]
     assert "Never import" not in shown["content"]
 
 
@@ -53,11 +54,15 @@ def test_structured_run_prevalidates_all_candidates(runner, work) -> None:
     payload = {
         "schema": "memoryledger.session.v1",
         "entries": [
-            {"id": "one", "type": "user_message", "text": "Safe lesson."},
+            {
+                "id": "one",
+                "type": "memory_correction",
+                "text": "Use memoryledger to update AGENTS.md.",
+            },
             {
                 "id": "two",
-                "type": "user_message",
-                "text": "password = abcdefghijklmnop",
+                "type": "memory_correction",
+                "text": "Use memoryledger to update AGENTS.md. password = abcdefghijklmnop",
             },
         ],
     }

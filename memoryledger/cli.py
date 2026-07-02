@@ -402,9 +402,7 @@ def evidence_add(
             reason,
         )
         data = {"memory_id": memory.id, "version": memory.version}
-        _json(data) if json_output else typer.echo(
-            f"{memory.id} v{memory.version:04d}"
-        )
+        _json(data) if json_output else typer.echo(f"{memory.id} v{memory.version:04d}")
     except Exception as exc:
         _handle_error(exc)
 
@@ -577,32 +575,48 @@ def templates_show(
         _handle_error(exc)
 
 
-def _template_apply(template_id: str, json_output: bool) -> None:
+def _template_apply(
+    template_id: str,
+    json_output: bool,
+    *,
+    accept: bool = False,
+    reason: str = "",
+) -> None:
     config, store = _load()
     if config.template_policy.ids and template_id not in config.template_policy.ids:
         raise MemoryledgerError("TEMPLATE_NOT_ENABLED", template_id)
+    if accept and not reason.strip():
+        raise MemoryledgerError("MISSING_REASON", "--accept requires a review reason")
     template = find_template(load_global_config(), template_id)
     action, memory = apply_template(store, template)
+    if accept and memory.status != "accepted":
+        memory = transition(store, memory.id, "accepted", reason)
     data = {"action": action, "memory_id": memory.id, "status": memory.status}
     _json(data) if json_output else typer.echo(f"{action} {memory.id}")
 
 
 @templates_app.command("apply")
 def templates_apply(
-    template_id: str, json_output: bool = typer.Option(False, "--json")
+    template_id: str,
+    accept: bool = typer.Option(False, "--accept"),
+    reason: str = typer.Option("", "--reason"),
+    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     try:
-        _template_apply(template_id, json_output)
+        _template_apply(template_id, json_output, accept=accept, reason=reason)
     except Exception as exc:
         _handle_error(exc)
 
 
 @templates_app.command("sync")
 def templates_sync(
-    template_id: str, json_output: bool = typer.Option(False, "--json")
+    template_id: str,
+    accept: bool = typer.Option(False, "--accept"),
+    reason: str = typer.Option("", "--reason"),
+    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     try:
-        _template_apply(template_id, json_output)
+        _template_apply(template_id, json_output, accept=accept, reason=reason)
     except Exception as exc:
         _handle_error(exc)
 

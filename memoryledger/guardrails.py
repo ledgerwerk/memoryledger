@@ -36,7 +36,9 @@ def confined_path(
     try:
         target.relative_to(root.resolve())
     except ValueError as exc:
-        raise MemoryledgerError(code, f"{label} must not escape its owning root") from exc
+        raise MemoryledgerError(
+            code, f"{label} must not escape its owning root"
+        ) from exc
     if must_exist and not target.exists():
         raise MemoryledgerError(code, f"{label} does not exist: {value}")
     return target
@@ -44,9 +46,7 @@ def confined_path(
 
 def validate_scope_path(root: Path, scope_path: str) -> None:
     if scope_path:
-        confined_path(
-            root, scope_path, code="INVALID_SCOPE_PATH", label="scope_path"
-        )
+        confined_path(root, scope_path, code="INVALID_SCOPE_PATH", label="scope_path")
 
 
 def validate_content(content: str) -> None:

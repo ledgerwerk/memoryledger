@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import uuid
 from dataclasses import replace
 from pathlib import Path
@@ -29,6 +30,73 @@ def _load_yaml(path: Path) -> dict[str, Any]:
         return {}
     data = yaml.safe_load(path.read_text())
     return data if isinstance(data, dict) else {}
+
+
+def _load_evidence_refs(path: Path) -> list[EvidenceRef]:
+    raw = yaml.safe_load(path.read_text()) if path.exists() else {}
+    if isinstance(raw, dict):
+        items = raw.get("evidence", [])
+    elif isinstance(raw, list):
+        items = raw
+    else:
+        items = []
+    return [EvidenceRef.from_dict(item) for item in items if isinstance(item, dict)]
+
+
+def _load_memory(path: Path) -> Memory:
+    data = _load_yaml(path / "memory.yaml")
+    if "evidence_refs" not in data:
+        refs = _load_evidence_refs(path / "evidence.yaml")
+        if refs:
+            data = {**data, "evidence_refs": [ref.to_dict() for ref in refs]}
+    return Memory.from_dict(data)
+
+
+def _load_toml(path: Path) -> dict[str, Any]:
+    data = tomllib.loads(path.read_text())
+    return data if isinstance(data, dict) else {}
+
+
+def _global_config_path() -> Path:
+    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return base / "ledger" / "memoryledger.toml"
+
+
+def _merged_section(
+    global_data: dict[str, Any], project_data: dict[str, Any], key: str
+) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    raw_global = global_data.get(key, {})
+    if isinstance(raw_global, dict):
+        merged.update(raw_global)
+    raw_project = project_data.get(key, {})
+    if isinstance(raw_project, dict):
+        merged.update(raw_project)
+    return merged
+
+
+def _parse_template_policy(data: dict[str, Any]) -> TemplatePolicy:
+    raw = data.get("template_policy", {})
+    if not isinstance(raw, dict):
+        return TemplatePolicy()
+    enabled_raw = raw.get("enabled", False)
+    ids: list[str] = []
+    enabled = False
+    if isinstance(enabled_raw, list):
+        ids.extend(str(value) for value in enabled_raw)
+        enabled = bool(ids)
+    else:
+        enabled = bool(enabled_raw)
+    raw_ids = raw.get("ids", [])
+    if isinstance(raw_ids, list):
+        for value in raw_ids:
+            item = str(value)
+            if item not in ids:
+                ids.append(item)
+    auto_accept = bool(raw.get("auto_accept", False))
+    return TemplatePolicy(
+        enabled=enabled or bool(ids), ids=ids, auto_accept=auto_accept
+    )
 
 
 def default_config_text(project_name: str, memoryledger_dir: str) -> str:
@@ -76,8 +144,14 @@ def load_config(start: Path | None = None) -> Config:
     path = find_config(start)
     if path is None:
         raise MemoryledgerError("NO_CONFIG", "Run `memoryledger init` first.")
-    data = tomllib.loads(path.read_text())
-    render_data = data.get("render", {})
+    project_data = _load_toml(path)
+    global_path = _global_config_path()
+    global_data = _load_toml(global_path) if global_path.exists() else {}
+    render_data = _merged_section(global_data, project_data, "render")
+    ledger_data = _merged_section(global_data, project_data, "ledger")
+    project_section = _merged_section(global_data, project_data, "project")
+    storage_data = _merged_section(global_data, project_data, "storage")
+    intake_data = _merged_section(global_data, project_data, "intake")
     render = RenderConfig(
         **{
             k: v
@@ -88,25 +162,32 @@ def load_config(start: Path | None = None) -> Config:
     config = Config(
         root=path.parent,
         config_path=path,
-        ledger_code=data.get("ledger", {}).get("code", "ml"),
-        ledger_name=data.get("ledger", {}).get("name", "memoryledger"),
-        project_name=data.get("project", {}).get("name", "my-project"),
-        project_uuid=data.get("project", {}).get("uuid", ""),
-        memoryledger_dir=data.get("storage", {}).get(
-            "memoryledger_dir", ".memoryledger"
-        ),
+        ledger_code=str(ledger_data.get("code", "ml")),
+        ledger_name=str(ledger_data.get("name", "memoryledger")),
+        project_name=str(project_section.get("name", "my-project")),
+        project_uuid=str(project_section.get("uuid", "")),
+        memoryledger_dir=str(storage_data.get("memoryledger_dir", ".memoryledger")),
         render=render,
-        allow_run_html=bool(data.get("intake", {}).get("allow_run_html", True)),
-        allow_current_run=bool(data.get("intake", {}).get("allow_current_run", True)),
-        default_review_status=data.get("intake", {}).get(
-            "default_review_status", "candidate"
+        allow_run_html=bool(intake_data.get("allow_run_html", True)),
+        allow_current_run=bool(intake_data.get("allow_current_run", True)),
+        default_review_status=str(
+            intake_data.get("default_review_status", "candidate")
         ),
-        template_policy=TemplatePolicy(
-            enabled=bool(data.get("template_policy", {}).get("enabled", False)),
-            ids=[
-                str(value)
-                for value in data.get("template_policy", {}).get("ids", [])
-            ],
+        template_policy=_parse_template_policy(
+            {
+                "template_policy": {
+                    **(
+                        global_data.get("template_policy", {})
+                        if isinstance(global_data.get("template_policy", {}), dict)
+                        else {}
+                    ),
+                    **(
+                        project_data.get("template_policy", {})
+                        if isinstance(project_data.get("template_policy", {}), dict)
+                        else {}
+                    ),
+                }
+            }
         ),
     )
     confined_path(config.root, config.memoryledger_dir, label="memoryledger_dir")
@@ -184,14 +265,14 @@ class Store:
         items: list[Memory] = []
         base = self.config.storage_dir / "memories"
         for path in sorted(base.glob("memory-*/memory.yaml")):
-            items.append(Memory.from_dict(_load_yaml(path)))
+            items.append(_load_memory(path.parent))
         return items
 
     def get(self, memory_id: str) -> Memory:
         path = self.memory_dir(memory_id) / "memory.yaml"
         if not path.exists():
             raise MemoryledgerError("NOT_FOUND", f"Memory not found: {memory_id}")
-        return Memory.from_dict(_load_yaml(path))
+        return _load_memory(path.parent)
 
     def read_content(self, memory_id: str) -> str:
         return (self.memory_dir(memory_id) / "content.md").read_text()
@@ -284,6 +365,16 @@ class Store:
         atomic_write_text(
             mdir / "evidence.md", evidence.rstrip() + "\n" if evidence else ""
         )
+        evidence_yaml = mdir / "evidence.yaml"
+        if memory.evidence_refs:
+            atomic_write_text(
+                evidence_yaml,
+                _dump_yaml(
+                    {"evidence": [ref.to_dict() for ref in memory.evidence_refs]}
+                ),
+            )
+        elif evidence_yaml.exists():
+            evidence_yaml.unlink()
         version = f"v{memory.version:04d}"
         atomic_write_text(
             mdir / "versions" / f"{version}.yaml",
@@ -349,7 +440,9 @@ class Store:
         self, memory_id: str, evidence: EvidenceRef, reason: str
     ) -> Memory:
         if not reason.strip():
-            raise MemoryledgerError("MISSING_REASON", "evidence changes require a reason")
+            raise MemoryledgerError(
+                "MISSING_REASON", "evidence changes require a reason"
+            )
         old = self.get(memory_id)
         new = replace(
             old,
@@ -357,7 +450,9 @@ class Store:
             updated_at=utc_now_iso(),
             version=old.version + 1,
         )
-        self.write(new, self.read_content(memory_id), self.read_evidence(memory_id), reason)
+        self.write(
+            new, self.read_content(memory_id), self.read_evidence(memory_id), reason
+        )
         return new
 
     def next_import_id(self) -> str:

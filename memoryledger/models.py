@@ -143,6 +143,7 @@ class Template:
 class TemplatePolicy:
     enabled: bool = False
     ids: list[str] = field(default_factory=list)
+    auto_accept: bool = False
 
 
 @dataclass(frozen=True)

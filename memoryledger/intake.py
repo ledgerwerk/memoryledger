@@ -42,13 +42,13 @@ def import_run_html(store: Store, path: Path) -> list[str]:
             if origin in existing:
                 continue
             store.validate_new(
-                "episode",
-                f"Run {proposal.entry_type.replace('_', ' ')}",
+                proposal.kind,
+                proposal.title,
                 proposal.text,
                 "Imported from allowlisted structured session data.",
                 "global",
                 "",
-                "linked_doc",
+                proposal.render_target,
                 "run_html",
                 origin=origin,
                 origin_hash=hashlib.sha256(proposal.text.encode()).hexdigest(),
@@ -68,13 +68,13 @@ def import_run_html(store: Store, path: Path) -> list[str]:
                 ids.append(existing[origin].id)
                 continue
             memory = store.create(
-                "episode",
-                f"Run {proposal.entry_type.replace('_', ' ')}",
+                proposal.kind,
+                proposal.title,
                 proposal.text,
                 "Imported from allowlisted structured session data.",
                 "global",
                 "",
-                "linked_doc",
+                proposal.render_target,
                 "run_html",
                 origin=origin,
                 origin_hash=hashlib.sha256(proposal.text.encode()).hexdigest(),

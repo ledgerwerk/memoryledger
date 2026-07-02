@@ -44,12 +44,13 @@ def test_evidence_add_list_and_version_snapshot(runner, work: Path) -> None:
     )
     assert listed["evidence"][0]["uri"] == "README.md"
     snapshot = yaml.safe_load(
-        (
-            work
-            / ".memoryledger/memories/memory-0001/versions/v0002.yaml"
-        ).read_text()
+        (work / ".memoryledger/memories/memory-0001/versions/v0002.yaml").read_text()
     )
     assert snapshot["memory"]["evidence_refs"][0]["kind"] == "file"
+    stored = yaml.safe_load(
+        (work / ".memoryledger/memories/memory-0001/evidence.yaml").read_text()
+    )
+    assert stored["evidence"][0]["kind"] == "file"
 
 
 def test_acceptance_adds_structured_approval(runner, work: Path) -> None:
@@ -73,7 +74,7 @@ def test_rendered_evidence_is_markdown_escaped(runner, work: Path) -> None:
     config.write_text(
         config.read_text().replace(
             "include_rejected = false",
-            'include_rejected = false\ninclude_evidence = true\n'
+            "include_rejected = false\ninclude_evidence = true\n"
             'evidence_index_path = "docs/agents/evidence.md"',
         )
     )
@@ -111,9 +112,48 @@ def test_rendered_evidence_is_markdown_escaped(runner, work: Path) -> None:
     )
     invoke_ok(runner, ["review", "accept", "memory-0001", "--reason", "Approved."])
     invoke_ok(runner, ["render"])
-    text = (
-        work
-        / ".memoryledger/rendered/docs/agents/procedures.md"
-    ).read_text()
+    text = (work / ".memoryledger/rendered/docs/agents/procedures.md").read_text()
     assert r"Source \[unsafe\]" in text
     assert r"a\_\(b\)" in text
+
+
+def test_root_render_points_to_evidence_index(runner, work: Path) -> None:
+    invoke_ok(runner, ["init"])
+    config = work / "memoryledger.toml"
+    config.write_text(
+        config.read_text().replace(
+            "include_rejected = false",
+            "include_rejected = false\ninclude_evidence = true\n"
+            'evidence_index_path = "docs/agents/evidence.md"',
+        )
+    )
+    invoke_ok(
+        runner,
+        ["memory", "create", "--kind", "rule", "--title", "R", "--text", "Rule."],
+    )
+    invoke_ok(
+        runner,
+        [
+            "memory",
+            "evidence",
+            "add",
+            "memory-0001",
+            "--kind",
+            "file",
+            "--title",
+            "Source",
+            "--uri",
+            "README.md",
+            "--reason",
+            "Attach source.",
+        ],
+    )
+    invoke_ok(runner, ["review", "accept", "memory-0001", "--reason", "Approved."])
+    invoke_ok(runner, ["render"])
+    root = (work / ".memoryledger/rendered/AGENTS.md").read_text()
+    index = (work / ".memoryledger/rendered/docs/agents/evidence.md").read_text()
+    assert (
+        "<!-- memoryledger:evidence memory-0001 docs/agents/evidence.md#memory-0001 -->"
+        in root
+    )
+    assert '<a id="memory-0001"></a>' in index

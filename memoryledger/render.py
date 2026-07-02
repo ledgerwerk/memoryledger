@@ -67,6 +67,31 @@ def _doc_path(config: Config, kind: str) -> str:
     return f"{config.render.linked_docs_dir}/{DOC_MAP[kind][1]}"
 
 
+def _evidence_comment(config: Config, memory: Memory) -> str:
+    if not config.render.include_evidence or not memory.evidence_refs:
+        return ""
+    if config.render.evidence_index_path:
+        return (
+            f"\n<!-- memoryledger:evidence {memory.id} "
+            f"{config.render.evidence_index_path}#{memory.id} -->"
+        )
+    return (
+        f"\n<!-- memoryledger:evidence {memory.id} "
+        + ",".join(ref.kind for ref in memory.evidence_refs)
+        + " -->"
+    )
+
+
+def _format_evidence_ref(ref) -> str:
+    label = _escape_markdown(ref.title)
+    if ref.line_start is not None and ref.line_end is not None:
+        if ref.line_start == ref.line_end:
+            label += f" (line {ref.line_start})"
+        else:
+            label += f" (lines {ref.line_start}-{ref.line_end})"
+    return f"- {label} (`{_escape_markdown(ref.uri)}`)"
+
+
 def render_all(config: Config) -> RenderResult:
     store = Store(config)
     memories = _active(config, store.all_memories())
@@ -87,13 +112,7 @@ def render_all(config: Config) -> RenderResult:
         if use_link and memory.kind in DOC_MAP:
             linked.setdefault(memory.kind, []).append((memory, content))
         elif memory.kind in root:
-            evidence_comment = ""
-            if config.render.include_evidence and memory.evidence_refs:
-                evidence_comment = (
-                    f"\n<!-- memory:{memory.id}; evidence:"
-                    + ",".join(ref.kind for ref in memory.evidence_refs)
-                    + " -->"
-                )
+            evidence_comment = _evidence_comment(config, memory)
             if memory.kind == "document":
                 root[memory.kind].append(
                     (memory, f"- {memory.title}{evidence_comment}")
@@ -115,12 +134,14 @@ def render_all(config: Config) -> RenderResult:
         for memory in memories:
             if not memory.evidence_refs:
                 continue
-            index_lines += [f"## {memory.id} — {memory.title}", ""]
+            index_lines += [
+                f'<a id="{memory.id}"></a>',
+                "",
+                f"## {memory.id} — {memory.title}",
+                "",
+            ]
             for ref in memory.evidence_refs:
-                index_lines.append(
-                    f"- {_escape_markdown(ref.title)} "
-                    f"(`{_escape_markdown(ref.uri)}`)"
-                )
+                index_lines.append(_format_evidence_ref(ref))
             index_lines.append("")
         linked_docs[config.render.evidence_index_path] = (
             "\n".join(index_lines).rstrip() + "\n"
@@ -199,10 +220,7 @@ def _render_linked(
             if config.render.include_evidence and memory.evidence_refs:
                 lines += ["### Evidence", ""]
                 for ref in memory.evidence_refs:
-                    lines.append(
-                        f"- {_escape_markdown(ref.title)} "
-                        f"(`{_escape_markdown(ref.uri)}`)"
-                    )
+                    lines.append(_format_evidence_ref(ref))
                 lines.append("")
         docs[_doc_path(config, kind)] = "\n".join(lines).rstrip() + "\n"
     return docs

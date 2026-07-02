@@ -8,7 +8,8 @@ from pathlib import Path
 from ledgercore.atomic import atomic_write_text
 
 from .errors import MemoryledgerError
-from .models import GENERATED_MARKER
+from .guardrails import safe_to_replace
+from .models import GENERATED_MARKER, EvidenceRef
 from .render import render_all
 from .review import transition
 from .storage import Store
@@ -73,7 +74,9 @@ def parse_markdown(path: Path, root: Path) -> tuple[str, list[AdoptionProposal]]
             body.append(line)
     flush()
     if not proposals:
-        raise MemoryledgerError("EMPTY_CONTENT", "manual target has no importable content")
+        raise MemoryledgerError(
+            "EMPTY_CONTENT", "manual target has no importable content"
+        )
     return digest, proposals
 
 
@@ -86,7 +89,9 @@ def adopt(
     reason: str,
 ) -> tuple[list[str], Path]:
     if not backup:
-        raise MemoryledgerError("ADOPTION_BACKUP_REQUIRED", "adoption requires --backup")
+        raise MemoryledgerError(
+            "ADOPTION_BACKUP_REQUIRED", "adoption requires --backup"
+        )
     initial_hash, proposals = parse_markdown(target, store.config.root)
     existing = {memory.origin: memory for memory in store.all_memories()}
     for proposal in proposals:
@@ -106,6 +111,12 @@ def adopt(
             origin_hash=proposal.source_hash,
         )
     ids: list[str] = []
+    evidence = EvidenceRef(
+        kind="file",
+        title="Original manual agent file",
+        uri=target.relative_to(store.config.root).as_posix(),
+        content_hash=initial_hash,
+    )
     for proposal in proposals:
         old = existing.get(proposal.origin)
         if old and old.origin_hash == proposal.source_hash:
@@ -122,6 +133,7 @@ def adopt(
             "adopt",
             origin=proposal.origin,
             origin_hash=proposal.source_hash,
+            evidence_refs=[evidence],
         )
         ids.append(memory.id)
         if accept:
@@ -129,10 +141,22 @@ def adopt(
     result = render_all(store.config)
     if source_hash(target.read_text()) != initial_hash:
         raise MemoryledgerError("ADOPTION_SOURCE_CHANGED", "manual target changed")
+    extra_targets = [
+        (store.config.root / rel, text) for rel, text in result.linked_docs.items()
+    ]
+    if store.config.render.nested_agents_enabled:
+        extra_targets.extend(
+            (store.config.root / rel, text) for rel, text in result.nested_docs.items()
+        )
+    for path, _text in extra_targets:
+        safe_to_replace(path)
     backup_path = _backup_path(target)
     shutil.copy2(target, backup_path)
     try:
         atomic_write_text(target, result.root_text)
+        for path, text in extra_targets:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_text(path, text)
     except Exception:
         if source_hash(backup_path.read_text()) == initial_hash:
             shutil.copy2(backup_path, target)

@@ -36,8 +36,7 @@ def load_global_config(path: Path | None = None) -> GlobalConfig:
     raw_templates = data.get("templates", [])
     if isinstance(raw_templates, dict):
         raw_templates = [
-            {"id": template_id, **value}
-            for template_id, value in raw_templates.items()
+            {"id": template_id, **value} for template_id, value in raw_templates.items()
         ]
     templates: list[Template] = []
     seen: set[str] = set()
@@ -69,7 +68,9 @@ def _parse_template(raw: dict[str, Any], root: Path) -> Template:
         source_root=root,
     )
     if not template.id or not template.title:
-        raise MemoryledgerError("INVALID_TEMPLATE", "template ID and title are required")
+        raise MemoryledgerError(
+            "INVALID_TEMPLATE", "template ID and title are required"
+        )
     return template
 
 

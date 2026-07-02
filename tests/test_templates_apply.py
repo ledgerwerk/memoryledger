@@ -18,9 +18,7 @@ def _write(work: Path, monkeypatch, content: str, version: str = "1") -> Path:
     return path
 
 
-def test_apply_idempotent_and_sync_returns_candidate(
-    runner, work, monkeypatch
-) -> None:
+def test_apply_idempotent_and_sync_returns_candidate(runner, work, monkeypatch) -> None:
     invoke_ok(runner, ["init"])
     path = _write(work, monkeypatch, "Initial.")
     first = json.loads(
@@ -44,3 +42,31 @@ def test_apply_idempotent_and_sync_returns_candidate(
     )
     assert changed["action"] == "updated"
     assert changed["status"] == "candidate"
+
+
+def test_apply_accept_requires_reason_and_accepts_memory(
+    runner, work, monkeypatch
+) -> None:
+    invoke_ok(runner, ["init"])
+    _write(work, monkeypatch, "Initial.")
+    missing_reason = runner.invoke(
+        __import__("memoryledger.cli", fromlist=["app"]).app,
+        ["templates", "apply", "base", "--accept"],
+    )
+    assert missing_reason.exit_code == 1
+    assert "MISSING_REASON" in missing_reason.output
+    applied = json.loads(
+        invoke_ok(
+            runner,
+            [
+                "templates",
+                "apply",
+                "base",
+                "--accept",
+                "--reason",
+                "User enabled global template.",
+                "--json",
+            ],
+        ).output
+    )
+    assert applied["status"] == "accepted"
