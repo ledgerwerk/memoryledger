@@ -87,3 +87,26 @@ def test_adopt_prevalidates_every_proposal(runner, work) -> None:
     assert result.exit_code == 1
     assert target.read_text() == original
     assert not list((work / ".memoryledger/memories").iterdir())
+
+
+def test_adopt_preview_reports_headings_and_shrink(runner, work) -> None:
+    invoke_ok(runner, ["init"])
+    target = work / "AGENTS.md"
+    target.write_text("# Notes\n\n## Guidance\n\nKeep this.")
+    data = json.loads(invoke_ok(runner, ["agents", "adopt", "--json"]).output)
+    assert data["headings"] == ["Notes", "Guidance"]
+    assert data["root_expected_to_shrink"] is True
+    assert data["proposals"][0]["origin"].endswith(":full-source")
+
+
+def test_verify_adoption_requires_reachable_full_source(runner, work) -> None:
+    invoke_ok(runner, ["init"])
+    target = work / "AGENTS.md"
+    target.write_text("# Notes\n\n## Guidance\n\nKeep this.")
+    invoke_ok(runner, ["agents", "adopt", "--apply", "--backup", "--accept", "--reason", "User approved adoption."])
+    data = json.loads(invoke_ok(runner, ["agents", "verify-adoption", "--source", "AGENTS.md.memoryledger-adopt-1.bak", "--json"]).output)
+    assert data["ok"] is True
+    assert data["full_document_reachable"] is True
+    assert data["missing_headings"] == []
+    assert "part of this agent context" in (work / "AGENTS.md").read_text()
+    assert "Full source-preserving copy" in (work / "AGENTS.md").read_text()

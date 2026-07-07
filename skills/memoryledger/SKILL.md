@@ -53,9 +53,27 @@ Do not:
 - accept candidate memory without explicit approval, review reason, or explicit template policy
 
 Never edit a configured generated target, or any file containing the
-memoryledger generated marker, directly. `AGENTS.md` and files under
-`docs/agents/` are not automatically generated merely because of their names;
+memoryledger generated marker, directly. `AGENTS.md` and configured linked
+document paths are not automatically generated merely because of their names;
 ownership is established by configuration and the generated marker.
+
+For multiline memories or text containing shell syntax, use `--stdin` with a
+single-quoted heredoc. Do not pass long memory bodies through `--text`:
+
+```bash
+cat <<'EOF' | memoryledger memory create \
+  --kind learning \
+  --title "Package workflow lesson" \
+  --scope repo \
+  --stdin \
+  --evidence "User approved run learning."
+Use literal shell syntax like ${stdenv.hostPlatform.system} safely here.
+EOF
+```
+
+Use only valid built-in kinds unless the CLI reports aliases: rule, learning,
+episode, procedure, semantic, document, local. Use `repo`, not `project`, for
+repository-wide scope. Run `memoryledger schema values` to list valid values.
 
 Examples:
 
@@ -66,10 +84,21 @@ Examples:
   - Agent must: create or update a memory record for the instruction, then render/export if approved.
   - Agent must not: patch `AGENTS.md`.
 
-If export reports `MANUAL_FILE`, preserve the file. Preview it with
-`memoryledger agents adopt`, then use the dedicated
-`memoryledger agents adopt --apply --backup` transaction only after reviewing
-the proposals. Add `--accept --reason "..."` only with explicit approval.
+## Migrating an existing AGENTS.md
+
+If export reports `MANUAL_FILE`, preserve the file. Do not overwrite it.
+
+1. Run `memoryledger agents adopt AGENTS.md --json` for a read-only migration plan.
+2. Inspect the source hash, headings, proposed memories, target placement, and whether the root is expected to shrink.
+3. If the user approves, run `memoryledger agents adopt AGENTS.md --apply --backup --accept --reason "..."`.
+4. Run `memoryledger agents verify-adoption --source AGENTS.md.memoryledger-adopt-1.bak`.
+5. Run `memoryledger render`.
+6. Run `memoryledger export`.
+7. Report whether the generated root became shorter and where the full migrated content lives.
+
+Adoption preserves the full original source as a generated linked document. The
+root `AGENTS.md` should clearly state that linked documents are generated memory
+and part of the agent context.
 
 ## Implementation workflow memory
 

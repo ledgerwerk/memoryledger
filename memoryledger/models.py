@@ -103,7 +103,7 @@ class Memory:
 @dataclass(frozen=True)
 class RenderConfig:
     root_agents_path: str = "AGENTS.md"
-    linked_docs_dir: str = "docs/agents"
+    linked_docs_dir: str = "agent_docs"
     nested_agents_enabled: bool = False
     linked_docs_enabled: bool = True
     max_root_agents_chars: int = 12000

@@ -64,5 +64,5 @@ This file contains reviewed long-term project memory.
 
 ## Linked documents
 
-- [Procedures](docs/agents/procedures.md)
-- [Semantic memory](docs/agents/semantic-memory.md)
+- [Procedures](agent_docs/procedures.md)
+- [Semantic memory](agent_docs/semantic-memory.md)

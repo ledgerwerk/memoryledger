@@ -82,6 +82,12 @@ def _evidence_comment(config: Config, memory: Memory) -> str:
     )
 
 
+def _anchor(title: str) -> str:
+    anchor = title.strip().lower()
+    anchor = "".join(ch if ch.isalnum() or ch in " -" else "" for ch in anchor)
+    return anchor.replace(" ", "-")
+
+
 def _format_evidence_ref(ref) -> str:
     label = _escape_markdown(ref.title)
     if ref.line_start is not None and ref.line_end is not None:
@@ -187,10 +193,24 @@ def _render_root(
         else:
             lines += [f"## {ROOT_SECTIONS[kind]}", "", *(t for _m, t in items), ""]
     if linked_docs:
-        lines += ["## Linked documents", ""]
+        lines += [
+            "## Linked documents",
+            "",
+            "The following files are generated from accepted memoryledger records and are part of this agent context. Read them when working in this repository.",
+            "",
+        ]
+        migrated_doc_path = next((path for path, text in linked_docs.items() if "## Full migrated source:" in text), "")
         for path in sorted(linked_docs):
             title = Path(path).stem.replace("-", " ").capitalize()
             lines.append(f"- [{title}]({path})")
+        if migrated_doc_path:
+            lines += [
+                "",
+                "## Migrated repository guidance",
+                "",
+                "The previous manual AGENTS.md was migrated without content deletion.",
+                f"Full source-preserving copy: [{Path(migrated_doc_path).stem.replace('-', ' ').capitalize()}]({migrated_doc_path}).",
+            ]
         lines.append("")
     if nested_docs:
         lines += ["## Nested agent files", ""]

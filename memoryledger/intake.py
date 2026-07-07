@@ -56,7 +56,7 @@ def import_run_html(store: Store, path: Path) -> list[str]:
                     EvidenceRef(
                         kind="run",
                         title="Structured run entry",
-                        uri=f"run:{import_key}#{proposal.entry_id}",
+                        uri=f"run:{proposal.session_id or import_key}#{proposal.entry_id}",
                         timestamp=proposal.timestamp,
                     )
                 ],
@@ -82,7 +82,7 @@ def import_run_html(store: Store, path: Path) -> list[str]:
                     EvidenceRef(
                         kind="run",
                         title="Structured run entry",
-                        uri=f"run:{import_key}#{proposal.entry_id}",
+                        uri=f"run:{proposal.session_id or import_key}#{proposal.entry_id}",
                         timestamp=proposal.timestamp,
                     )
                 ],

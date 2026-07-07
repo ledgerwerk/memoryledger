@@ -114,7 +114,7 @@ memoryledger_dir = "{memoryledger_dir}"
 
 [render]
 root_agents_path = "AGENTS.md"
-linked_docs_dir = "docs/agents"
+linked_docs_dir = "agent_docs"
 nested_agents_enabled = false
 linked_docs_enabled = true
 max_root_agents_chars = 12000

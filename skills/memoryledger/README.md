@@ -13,5 +13,5 @@ update memory records first. Do not write `AGENTS.md` directly.
 
 Do not edit configured or marker-owned generated targets directly. If export
 finds a manual target, preserve it and preview `memoryledger agents adopt`;
-replacement requires `--apply --backup`. Not every file in `docs/agents/` is
+replacement requires `--apply --backup`. Not every file in `agent_docs/` is
 owned by memoryledger.
