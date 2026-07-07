@@ -1,5 +1,0 @@
-- Prefer the smallest correct change.
-- Preserve memory review semantics before convenience.
-- Preserve deterministic and safe generated output.
-- Keep changes in the owning layer.
-- Avoid speculative abstractions, broad rewrites, unrelated formatting, casual contract changes, migration code unless requested, and commits.

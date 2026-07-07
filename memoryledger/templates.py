@@ -11,7 +11,6 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore[no-redef]
 
-from ledgercore.time import utc_now_iso
 
 from .errors import MemoryledgerError
 from .guardrails import confined_path, validate_content
@@ -128,6 +127,7 @@ def apply_template(store: Store, template: Template) -> tuple[str, Memory]:
         )
     if memory.origin_hash == digest:
         return "unchanged", memory
+    version = store.bump_ledger_version()
     updated = replace(
         memory,
         kind=template.kind,
@@ -138,8 +138,7 @@ def apply_template(store: Store, template: Template) -> tuple[str, Memory]:
         render_target=template.render_target,
         section=template.section,
         origin_hash=digest,
-        updated_at=utc_now_iso(),
-        version=memory.version + 1,
+        modified_version=version,
     )
     store.write(
         updated,

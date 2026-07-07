@@ -97,17 +97,27 @@ def _classify(entry_type: str, text: str) -> RunProposal | None:
     normalized = _normalized(text)
     if entry_type == "memory_correction":
         if any(keyword in normalized for keyword in WORKFLOW_KEYWORDS):
-            return RunProposal("", entry_type, text, "episode", "Run memoryledger correction")
+            return RunProposal(
+                "", entry_type, text, "episode", "Run memoryledger correction"
+            )
         return None
     if entry_type == "user_message":
         if any(pattern in normalized for pattern in USER_PATTERNS) or (
             "memoryledger" in normalized and "agents.md" in normalized
         ):
-            return RunProposal("", entry_type, text, "episode", "Run durable memory request")
+            return RunProposal(
+                "", entry_type, text, "episode", "Run durable memory request"
+            )
         return None
-    if entry_type == "command_outcome" and any(keyword in normalized for keyword in WORKFLOW_KEYWORDS):
-        return RunProposal("", entry_type, text, "episode", "Run memoryledger command outcome")
-    if entry_type == "assistant_summary" and any(keyword in normalized for keyword in ASSISTANT_SUMMARY_KEYWORDS):
+    if entry_type == "command_outcome" and any(
+        keyword in normalized for keyword in WORKFLOW_KEYWORDS
+    ):
+        return RunProposal(
+            "", entry_type, text, "episode", "Run memoryledger command outcome"
+        )
+    if entry_type == "assistant_summary" and any(
+        keyword in normalized for keyword in ASSISTANT_SUMMARY_KEYWORDS
+    ):
         return RunProposal("", entry_type, text, "episode", "Run memoryledger summary")
     return None
 
@@ -121,7 +131,9 @@ def decode_session(html: str) -> list[RunProposal] | None:
     try:
         decoded = base64.b64decode(match.group(1).strip(), validate=True)
         if len(decoded) > MAX_PAYLOAD_BYTES:
-            raise MemoryledgerError("RUN_TOO_LARGE", "session payload exceeds size limit")
+            raise MemoryledgerError(
+                "RUN_TOO_LARGE", "session payload exceeds size limit"
+            )
         data = json.loads(decoded)
     except MemoryledgerError:
         raise
@@ -131,7 +143,9 @@ def decode_session(html: str) -> list[RunProposal] | None:
         raise MemoryledgerError("UNSUPPORTED_RUN_SCHEMA", "unsupported session schema")
     if data.get("schema") == "memoryledger.session.v1":
         return _decode_memoryledger_session(data)
-    if data.get("header", {}).get("type") == "session" and isinstance(data.get("entries"), list):
+    if data.get("header", {}).get("type") == "session" and isinstance(
+        data.get("entries"), list
+    ):
         return _decode_real_session_export(data)
     raise MemoryledgerError("UNSUPPORTED_RUN_SCHEMA", "unsupported session schema")
 
@@ -151,7 +165,17 @@ def _decode_memoryledger_session(data: dict) -> list[RunProposal]:
         proposal = _classify(str(raw["type"]), text)
         if proposal is None:
             continue
-        proposals.append(RunProposal(entry_id, proposal.entry_type, proposal.text, proposal.kind, proposal.title, proposal.render_target, str(raw.get("timestamp", ""))))
+        proposals.append(
+            RunProposal(
+                entry_id,
+                proposal.entry_type,
+                proposal.text,
+                proposal.kind,
+                proposal.title,
+                proposal.render_target,
+                str(raw.get("timestamp", "")),
+            )
+        )
     return proposals
 
 
@@ -175,7 +199,18 @@ def _decode_real_session_export(data: dict) -> list[RunProposal]:
         proposal = _classify(entry_type, text)
         if proposal is None:
             continue
-        proposals.append(RunProposal(entry_id, proposal.entry_type, proposal.text, proposal.kind, proposal.title, proposal.render_target, str(raw.get("timestamp", "")), session_id))
+        proposals.append(
+            RunProposal(
+                entry_id,
+                proposal.entry_type,
+                proposal.text,
+                proposal.kind,
+                proposal.title,
+                proposal.render_target,
+                str(raw.get("timestamp", "")),
+                session_id,
+            )
+        )
     return proposals
 
 
@@ -197,7 +232,9 @@ def _visible_text_from_message(msg: dict) -> str:
             continue
         if item.get("type") == "text":
             parts.append(str(item.get("text") or ""))
-    if msg.get("role", "").lower() in {"toolresult", "tool_result", "tool"} and msg.get("toolName"):
+    if msg.get("role", "").lower() in {"toolresult", "tool_result", "tool"} and msg.get(
+        "toolName"
+    ):
         prefix = f"tool {msg.get('toolName')}"
         if msg.get("isError"):
             prefix += " error"

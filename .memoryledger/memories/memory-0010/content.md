@@ -1,4 +1,0 @@
-- Docs, examples, and skill files must agree.
-- When changing commands or workflow behavior, update `README.md`, `skills/memoryledger/SKILL.md`, and tests that validate skill files or CLI examples as needed.
-- Do not document commands that are not registered.
-- Do not leave examples using removed options or aliases.

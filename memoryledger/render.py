@@ -199,7 +199,14 @@ def _render_root(
             "The following files are generated from accepted memoryledger records and are part of this agent context. Read them when working in this repository.",
             "",
         ]
-        migrated_doc_path = next((path for path, text in linked_docs.items() if "## Full migrated source:" in text), "")
+        migrated_doc_path = next(
+            (
+                path
+                for path, text in linked_docs.items()
+                if "## Full migrated source:" in text
+            ),
+            "",
+        )
         for path in sorted(linked_docs):
             title = Path(path).stem.replace("-", " ").capitalize()
             lines.append(f"- [{title}]({path})")

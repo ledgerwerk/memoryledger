@@ -1,8 +1,0 @@
-- Treat `.memoryledger/` as durable project state.
-- Each memory lives in `.memoryledger/memories/memory-NNNN/`.
-- `memory.yaml`, `content.md`, `evidence.md`, and `versions/` are canonical memory records.
-- Accepted memory must have evidence or a review reason.
-- Candidate memory is not rendered by default.
-- Rendered files must contain the generated marker.
-- Manual files without the generated marker must not be overwritten by export.
-- Scope paths must remain repo-relative and must not escape the workspace.

@@ -1,7 +1,0 @@
-- Assume the user is technically strong.
-- Be direct, concrete, and brief.
-- Do not explain obvious Python, Typer, YAML, pytest, ruff, mypy, or packaging basics.
-- Do not narrate trivial edits.
-- Ask a clarifying question only when ambiguity could change memory policy, review semantics, file safety, or CLI contracts.
-- Otherwise, proceed with the smallest correct change.
-- Report results as: changed, verified, not verified, risks.

@@ -182,8 +182,7 @@ def apply(store: Store, proposals: list[ScanProposal]) -> list[dict[str, str]]:
         if old:
             from dataclasses import replace
 
-            from ledgercore.time import utc_now_iso
-
+            version = store.bump_ledger_version()
             updated = replace(
                 old,
                 kind=proposal.kind,
@@ -193,8 +192,7 @@ def apply(store: Store, proposals: list[ScanProposal]) -> list[dict[str, str]]:
                 render_target=proposal.render_target,
                 origin_hash=proposal.source_hash,
                 evidence_refs=[evidence],
-                updated_at=utc_now_iso(),
-                version=old.version + 1,
+                modified_version=version,
             )
             store.write(
                 updated, proposal.suggested, "Scanner fact changed.", "scan update"

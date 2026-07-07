@@ -59,14 +59,17 @@ class Memory:
     scope_path: str
     render_target: str
     source: str
-    created_at: str
-    updated_at: str
-    version: int
+    created_version: int
+    modified_version: int
     tags: list[str] = field(default_factory=list)
     origin: str = ""
     origin_hash: str = ""
     section: str = ""
     evidence_refs: list[EvidenceRef] = field(default_factory=list)
+
+    @property
+    def version(self) -> int:
+        return self.modified_version
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -75,8 +78,9 @@ class Memory:
     def from_dict(cls, data: dict[str, object]) -> Memory:
         raw_tags = data.get("tags", [])
         tags = raw_tags if isinstance(raw_tags, list) else []
-        raw_refs = data.get("evidence_refs", [])
+        raw_refs = data.get("evidence_refs", data.get("evidence", []))
         refs = raw_refs if isinstance(raw_refs, list) else []
+        legacy_version = int(str(data.get("version", 1)))
         return cls(
             id=str(data["id"]),
             kind=str(data["kind"]),
@@ -87,9 +91,8 @@ class Memory:
             scope_path=str(data.get("scope_path", "")),
             render_target=str(data.get("render_target", "root_agents")),
             source=str(data.get("source", "cli")),
-            created_at=str(data["created_at"]),
-            updated_at=str(data["updated_at"]),
-            version=int(str(data.get("version", 1))),
+            created_version=int(str(data.get("created_version", legacy_version))),
+            modified_version=int(str(data.get("modified_version", legacy_version))),
             tags=[str(tag) for tag in tags],
             origin=str(data.get("origin", "")),
             origin_hash=str(data.get("origin_hash", "")),

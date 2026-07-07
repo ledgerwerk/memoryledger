@@ -21,7 +21,7 @@ def test_global_config_merges_before_project(runner, work: Path, monkeypatch) ->
     global_path.parent.mkdir(parents=True)
     global_path.write_text(
         '[render]\ninclude_evidence = true\nlinked_docs_dir = "docs/global"\n'
-        'evidence_index_path = "docs/agents/evidence.md"\n'
+        'evidence_index_path = "agent_docs/evidence.md"\n'
         '[template_policy]\nenabled = ["base"]\nauto_accept = false\n'
     )
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
@@ -29,13 +29,13 @@ def test_global_config_merges_before_project(runner, work: Path, monkeypatch) ->
     config = work / "memoryledger.toml"
     config.write_text(
         config.read_text().replace(
-            'linked_docs_dir = "docs/agents"',
+            'linked_docs_dir = "agent_docs"',
             'linked_docs_dir = "docs/project"',
         )
     )
     data = load_config(work)
     assert data.render.include_evidence is True
-    assert data.render.evidence_index_path == "docs/agents/evidence.md"
+    assert data.render.evidence_index_path == "agent_docs/evidence.md"
     assert data.render.linked_docs_dir == "docs/project"
     assert data.template_policy.enabled is True
     assert data.template_policy.ids == ["base"]

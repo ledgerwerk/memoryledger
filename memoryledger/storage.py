@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import uuid
 from dataclasses import replace
 from pathlib import Path
@@ -12,11 +13,17 @@ except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore[no-redef]
 import yaml
 from ledgercore.atomic import atomic_write_text
-from ledgercore.time import utc_now_iso
 
 from .errors import MemoryledgerError
 from .guardrails import confined_path, validate_memory, validate_scope_path
-from .models import Config, EvidenceRef, Memory, RenderConfig, TemplatePolicy
+from .models import (
+    GENERATED_MARKER,
+    Config,
+    EvidenceRef,
+    Memory,
+    RenderConfig,
+    TemplatePolicy,
+)
 
 CONFIG_NAMES = ("memoryledger.toml", ".memoryledger.toml")
 
@@ -32,6 +39,32 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
+    if not text.startswith("---\n"):
+        raise MemoryledgerError(
+            "INVALID_MEMORY_FILE", "memory file is missing front matter"
+        )
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        raise MemoryledgerError(
+            "INVALID_MEMORY_FILE", "memory file has unterminated front matter"
+        )
+    raw = yaml.safe_load(text[4:end]) or {}
+    if not isinstance(raw, dict):
+        raise MemoryledgerError(
+            "INVALID_MEMORY_FILE", "memory front matter must be a map"
+        )
+    return raw, text[end + 5 :].lstrip("\n")
+
+
+def _frontmatter_text(memory: Memory, content: str) -> str:
+    data = memory.to_dict()
+    refs = data.pop("evidence_refs", [])
+    if refs:
+        data["evidence"] = refs
+    return f"---\n{_dump_yaml(data)}---\n\n{content.rstrip()}\n"
+
+
 def _load_evidence_refs(path: Path) -> list[EvidenceRef]:
     raw = yaml.safe_load(path.read_text()) if path.exists() else {}
     if isinstance(raw, dict):
@@ -44,6 +77,9 @@ def _load_evidence_refs(path: Path) -> list[EvidenceRef]:
 
 
 def _load_memory(path: Path) -> Memory:
+    if path.is_file() and path.suffix == ".md":
+        data, _body = _split_frontmatter(path.read_text())
+        return Memory.from_dict(data)
     data = _load_yaml(path / "memory.yaml")
     if "evidence_refs" not in data:
         refs = _load_evidence_refs(path / "evidence.yaml")
@@ -93,9 +129,10 @@ def _parse_template_policy(data: dict[str, Any]) -> TemplatePolicy:
             item = str(value)
             if item not in ids:
                 ids.append(item)
-    auto_accept = bool(raw.get("auto_accept", False))
     return TemplatePolicy(
-        enabled=enabled or bool(ids), ids=ids, auto_accept=auto_accept
+        enabled=enabled or bool(ids),
+        ids=ids,
+        auto_accept=bool(raw.get("auto_accept", False)),
     )
 
 
@@ -104,6 +141,7 @@ def default_config_text(project_name: str, memoryledger_dir: str) -> str:
     return f'''[ledger]
 code = "ml"
 name = "memoryledger"
+version = 0
 
 [project]
 name = "{project_name}"
@@ -251,6 +289,34 @@ class Store:
     def write_storage_meta(self, data: dict[str, object]) -> None:
         atomic_write_text(self.config.storage_dir / "storage.yaml", _dump_yaml(data))
 
+    def ledger_version(self) -> int:
+        data = _load_toml(self.config.config_path)
+        ledger = data.get("ledger", {})
+        return int(ledger.get("version", 0)) if isinstance(ledger, dict) else 0
+
+    def bump_ledger_version(self) -> int:
+        old = self.ledger_version()
+        new = old + 1
+        text = self.config.config_path.read_text()
+        if "[ledger]" not in text:
+            text = f"[ledger]\nversion = {new}\n\n" + text
+        elif "version =" in text.split("[ledger]", 1)[1].split("\n[", 1)[0]:
+            lines = text.splitlines()
+            in_ledger = False
+            for i, line in enumerate(lines):
+                if line.strip() == "[ledger]":
+                    in_ledger = True
+                elif in_ledger and line.startswith("["):
+                    break
+                elif in_ledger and line.strip().startswith("version"):
+                    lines[i] = f"version = {new}"
+                    break
+            text = "\n".join(lines) + "\n"
+        else:
+            text = text.replace("[ledger]\n", f"[ledger]\nversion = {new}\n", 1)
+        atomic_write_text(self.config.config_path, text)
+        return new
+
     def next_id(self) -> str:
         meta = self.storage_meta()
         number = int(meta.get("next_memory_number", 1))
@@ -261,20 +327,31 @@ class Store:
     def memory_dir(self, memory_id: str) -> Path:
         return self.config.storage_dir / "memories" / memory_id
 
+    def memory_file(self, memory_id: str) -> Path:
+        return self.config.storage_dir / "memories" / f"{memory_id}.md"
+
     def all_memories(self) -> list[Memory]:
-        items: list[Memory] = []
         base = self.config.storage_dir / "memories"
+        items = [_load_memory(path) for path in sorted(base.glob("memory-*.md"))]
         for path in sorted(base.glob("memory-*/memory.yaml")):
-            items.append(_load_memory(path.parent))
-        return items
+            if not self.memory_file(path.parent.name).exists():
+                items.append(_load_memory(path.parent))
+        return sorted(items, key=lambda item: item.id)
 
     def get(self, memory_id: str) -> Memory:
+        md = self.memory_file(memory_id)
+        if md.exists():
+            return _load_memory(md)
         path = self.memory_dir(memory_id) / "memory.yaml"
         if not path.exists():
             raise MemoryledgerError("NOT_FOUND", f"Memory not found: {memory_id}")
         return _load_memory(path.parent)
 
     def read_content(self, memory_id: str) -> str:
+        md = self.memory_file(memory_id)
+        if md.exists():
+            _data, body = _split_frontmatter(md.read_text())
+            return body
         return (self.memory_dir(memory_id) / "content.md").read_text()
 
     def read_evidence(self, memory_id: str) -> str:
@@ -297,6 +374,7 @@ class Store:
         section: str = "",
         evidence_refs: list[EvidenceRef] | None = None,
     ) -> Memory:
+        version = self.bump_ledger_version()
         memory = self.validate_new(
             kind,
             title,
@@ -310,6 +388,7 @@ class Store:
             origin_hash=origin_hash,
             section=section,
             evidence_refs=evidence_refs,
+            version=version,
         )
         memory = replace(memory, id=self.next_id())
         self.write(memory, content, evidence, "created")
@@ -330,8 +409,9 @@ class Store:
         origin_hash: str = "",
         section: str = "",
         evidence_refs: list[EvidenceRef] | None = None,
+        version: int | None = None,
     ) -> Memory:
-        now = utc_now_iso()
+        current = version if version is not None else max(1, self.ledger_version())
         memory = Memory(
             "memory-pending",
             kind,
@@ -342,9 +422,8 @@ class Store:
             scope_path,
             render_target,
             source,
-            now,
-            now,
-            1,
+            current,
+            current,
             [],
             origin,
             origin_hash,
@@ -358,34 +437,16 @@ class Store:
     def write(self, memory: Memory, content: str, evidence: str, reason: str) -> None:
         validate_scope_path(self.config.root, memory.scope_path)
         validate_memory(memory, content, evidence, self.config.root)
-        mdir = self.memory_dir(memory.id)
-        (mdir / "versions").mkdir(parents=True, exist_ok=True)
-        atomic_write_text(mdir / "memory.yaml", _dump_yaml(memory.to_dict()))
-        atomic_write_text(mdir / "content.md", content.rstrip() + "\n")
         atomic_write_text(
-            mdir / "evidence.md", evidence.rstrip() + "\n" if evidence else ""
+            self.memory_file(memory.id), _frontmatter_text(memory, content)
         )
-        evidence_yaml = mdir / "evidence.yaml"
-        if memory.evidence_refs:
-            atomic_write_text(
-                evidence_yaml,
-                _dump_yaml(
-                    {"evidence": [ref.to_dict() for ref in memory.evidence_refs]}
-                ),
-            )
-        elif evidence_yaml.exists():
-            evidence_yaml.unlink()
-        version = f"v{memory.version:04d}"
-        atomic_write_text(
-            mdir / "versions" / f"{version}.yaml",
-            _dump_yaml(
-                {"memory": memory.to_dict(), "reason": reason, "evidence": evidence}
-            ),
-        )
-        atomic_write_text(mdir / "versions" / f"{version}.md", content.rstrip() + "\n")
+        legacy = self.memory_dir(memory.id)
+        if legacy.exists() and legacy.is_dir():
+            shutil.rmtree(legacy)
 
     def update_status(self, memory_id: str, status: str, reason: str) -> Memory:
         old = self.get(memory_id)
+        version = self.bump_ledger_version()
         refs = old.evidence_refs
         if status == "accepted":
             refs = [
@@ -393,18 +454,11 @@ class Store:
                 EvidenceRef(
                     kind="user_approval",
                     title="Review approval",
-                    uri=f"memory:{memory_id}#review-v{old.version + 1:04d}",
+                    uri=f"memory:{memory_id}#review-v{version}",
                     excerpt=reason,
-                    timestamp=utc_now_iso(),
                 ),
             ]
-        new = replace(
-            old,
-            status=status,
-            evidence_refs=refs,
-            updated_at=utc_now_iso(),
-            version=old.version + 1,
-        )
+        new = replace(old, status=status, evidence_refs=refs, modified_version=version)
         self.write(
             new,
             self.read_content(memory_id),
@@ -422,6 +476,7 @@ class Store:
         section: str | None = None,
     ) -> Memory:
         old = self.get(memory_id)
+        version = self.bump_ledger_version()
         body = (
             self.read_content(memory_id).rstrip() + "\n" + content.rstrip() + "\n"
             if append
@@ -430,8 +485,7 @@ class Store:
         new = replace(
             old,
             section=old.section if section is None else section,
-            updated_at=utc_now_iso(),
-            version=old.version + 1,
+            modified_version=version,
         )
         self.write(new, body, self.read_evidence(memory_id), reason)
         return new
@@ -444,11 +498,9 @@ class Store:
                 "MISSING_REASON", "evidence changes require a reason"
             )
         old = self.get(memory_id)
+        version = self.bump_ledger_version()
         new = replace(
-            old,
-            evidence_refs=[*old.evidence_refs, evidence],
-            updated_at=utc_now_iso(),
-            version=old.version + 1,
+            old, evidence_refs=[*old.evidence_refs, evidence], modified_version=version
         )
         self.write(
             new, self.read_content(memory_id), self.read_evidence(memory_id), reason
@@ -461,3 +513,83 @@ class Store:
         meta["next_import_number"] = number + 1
         self.write_storage_meta(meta)
         return f"import-{number:04d}"
+
+    def storage_v2_plan(self) -> dict[str, object]:
+        base = self.config.storage_dir / "memories"
+        legacy = sorted(path.parent for path in base.glob("memory-*/memory.yaml"))
+        return {
+            "legacy_memories": [path.name for path in legacy],
+            "create": [str(base / f"{path.name}.md") for path in legacy],
+            "remove": [str(path) for path in legacy],
+            "ledger_version": max(
+                [
+                    self.ledger_version(),
+                    *[self.get(path.name).modified_version for path in legacy],
+                ],
+                default=self.ledger_version(),
+            ),
+        }
+
+    def migrate_storage_v2(self, backup: bool = False) -> dict[str, object]:
+        plan = self.storage_v2_plan()
+        changed: list[str] = []
+        base = self.config.storage_dir / "memories"
+        legacy_ids = [str(item) for item in plan["legacy_memories"]]
+        for memory_id in legacy_ids:
+            memory = self.get(memory_id)
+            content = self.read_content(memory_id)
+            target = base / f"{memory_id}.md"
+            atomic_write_text(target, _frontmatter_text(memory, content))
+            changed.append(str(target))
+            legacy = base / str(memory_id)
+            if backup:
+                shutil.copytree(
+                    legacy, base / f"{memory_id}.legacy-backup", dirs_exist_ok=True
+                )
+            shutil.rmtree(legacy)
+            changed.append(str(legacy))
+        target_version = int(str(plan["ledger_version"]))
+        if target_version > self.ledger_version():
+            text = self.config.config_path.read_text()
+            if "version =" in text:
+                lines = [
+                    f"version = {target_version}"
+                    if line.strip().startswith("version")
+                    else line
+                    for line in text.splitlines()
+                ]
+                atomic_write_text(self.config.config_path, "\n".join(lines) + "\n")
+        return {**plan, "changed": changed}
+
+
+def linked_docs_dir_migration(
+    config: Config, from_dir: str, to_dir: str, apply: bool = False
+) -> dict[str, object]:
+    src = confined_path(config.root, from_dir, code="INVALID_OUTPUT_PATH", label="from")
+    dst = confined_path(config.root, to_dir, code="INVALID_OUTPUT_PATH", label="to")
+    movable: list[str] = []
+    skipped: list[str] = []
+    if src.exists():
+        for path in sorted(p for p in src.rglob("*") if p.is_file()):
+            if GENERATED_MARKER in path.read_text():
+                movable.append(str(path.relative_to(config.root)))
+            else:
+                skipped.append(str(path.relative_to(config.root)))
+    if apply:
+        for rel in movable:
+            source = config.root / rel
+            target = dst / source.relative_to(src)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source), str(target))
+        text = config.config_path.read_text()
+        old = f'linked_docs_dir = "{from_dir}"'
+        new = f'linked_docs_dir = "{to_dir}"'
+        if old in text:
+            atomic_write_text(config.config_path, text.replace(old, new, 1))
+    return {
+        "from": from_dir,
+        "to": to_dir,
+        "move": movable,
+        "skip": skipped,
+        "mutated": apply,
+    }

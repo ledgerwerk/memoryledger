@@ -36,11 +36,10 @@ Use memory records as the source of truth, then render and export.
 1. Treat user-provided memory as a candidate unless the user explicitly approves it.
 2. Create or update memory with `memoryledger memory create`, `memoryledger memory edit`, or `memoryledger memory append`.
 3. Use `memoryledger review accept` only when the user clearly approved the memory or an explicit template policy allows acceptance.
-4. Run `memoryledger render`.
-5. Run `memoryledger export`.
-6. Use `--include-nested` only when nested export is enabled or explicitly requested.
-7. Show the resulting `AGENTS.md` path and any linked document paths.
-8. Keep root `AGENTS.md` concise and move long memory to linked documents.
+4. For the common approved workflow, run `memoryledger finalize --accept-all --reason "..." --export`. Otherwise run `memoryledger render` then `memoryledger export`.
+5. Use `--include-nested` only when nested export is enabled or explicitly requested.
+6. Show the resulting `AGENTS.md` path and any linked document paths.
+7. Keep root `AGENTS.md` concise and move long memory to linked documents.
 
 ## Forbidden workflow
 
@@ -71,9 +70,10 @@ Use literal shell syntax like ${stdenv.hostPlatform.system} safely here.
 EOF
 ```
 
-Use only valid built-in kinds unless the CLI reports aliases: rule, learning,
-episode, procedure, semantic, document, local. Use `repo`, not `project`, for
-repository-wide scope. Run `memoryledger schema values` to list valid values.
+Use built-in kinds: rule, learning, episode, procedure, semantic, document, local.
+The CLI silently normalizes supported aliases such as `package-workflow` to
+`procedure` and `project` scope to `repo`. Run `memoryledger schema values` to
+list valid canonical values.
 
 Examples:
 
@@ -92,13 +92,18 @@ If export reports `MANUAL_FILE`, preserve the file. Do not overwrite it.
 2. Inspect the source hash, headings, proposed memories, target placement, and whether the root is expected to shrink.
 3. If the user approves, run `memoryledger agents adopt AGENTS.md --apply --backup --accept --reason "..."`.
 4. Run `memoryledger agents verify-adoption --source AGENTS.md.memoryledger-adopt-1.bak`.
-5. Run `memoryledger render`.
-6. Run `memoryledger export`.
-7. Report whether the generated root became shorter and where the full migrated content lives.
+5. Run `memoryledger finalize --accept-all --reason "..." --export`, or run `memoryledger render` and `memoryledger export` separately.
+6. Report whether the generated root became shorter and where the full migrated content lives.
 
 Adoption preserves the full original source as a generated linked document. The
 root `AGENTS.md` should clearly state that linked documents are generated memory
 and part of the agent context.
+
+## Storage and linked-doc migrations
+
+Storage v2 uses one front-matter Markdown file per memory under `.memoryledger/memories/`.
+Use `memoryledger migrate storage-v2 --plan` before `--apply --backup` when converting legacy sidecar records.
+Generated linked documents default to `agent_docs/`. Use `memoryledger migrate linked-docs-dir --from docs/agents --to agent_docs --plan` before `--apply`; it moves only files containing the generated marker.
 
 ## Implementation workflow memory
 

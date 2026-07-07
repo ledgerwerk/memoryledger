@@ -58,8 +58,6 @@ def test_invalid_create_does_not_consume_id(runner, work) -> None:
     )
     assert "memory-0001" in result.output
 
-import json
-
 
 def test_schema_values_json_and_precise_invalid_kind(runner, work) -> None:
     invoke_ok(runner, ["init"])
@@ -67,7 +65,24 @@ def test_schema_values_json_and_precise_invalid_kind(runner, work) -> None:
     assert "procedure" in data["kinds"]
     assert "repo" in data["scopes"]
     assert "run" in data["evidence_kinds"]
-    result = runner.invoke(__import__("memoryledger.cli", fromlist=["app"]).app, ["memory", "create", "--kind", "package-workflow", "--title", "Bad", "--text", "Bad"])
-    assert result.exit_code == 1
-    assert "INVALID_KIND" in result.output
-    assert "Valid: rule" in result.output
+    result = invoke_ok(
+        runner,
+        [
+            "memory",
+            "create",
+            "--kind",
+            "package-workflow",
+            "--scope",
+            "project",
+            "--title",
+            "Alias",
+            "--text",
+            "Alias works.",
+        ],
+    )
+    assert "memory-0001" in result.output
+    data = json.loads(
+        invoke_ok(runner, ["memory", "show", "memory-0001", "--json"]).output
+    )
+    assert data["kind"] == "procedure"
+    assert data["scope"] == "repo"

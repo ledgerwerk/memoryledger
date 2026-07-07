@@ -1,5 +1,0 @@
-- Preserve registered command families: `init`, `status`, `doctor`, `info`, `memory`, `review`, `render`, `export`, `agents`, and `import`.
-- Keep `memledger` as an alias for the same launcher.
-- Do not casually change command names, option names, exit codes, or human output that tests may rely on.
-- `--json` output is a machine-readable contract. Test payload shape when changing it.
-- Error output should preserve structured `MemoryledgerError` codes where applicable.

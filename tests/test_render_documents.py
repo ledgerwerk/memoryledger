@@ -26,6 +26,6 @@ def test_linked_document_export(runner, work: Path) -> None:
     invoke_ok(runner, ["review", "accept", "memory-0001", "--reason", "Approved."])
     invoke_ok(runner, ["export"])
     assert (work / "AGENTS.md").exists()
-    doc = work / "docs" / "agents" / "procedures.md"
+    doc = work / "agent_docs" / "procedures.md"
     assert doc.exists()
     assert "Workflow" in doc.read_text()

@@ -41,7 +41,11 @@ def source_hash(text: str) -> str:
 
 
 def source_headings(text: str) -> list[str]:
-    return [line.lstrip("# ").strip() for line in text.splitlines() if re.match(r"^#{1,6}\s+", line) and line.lstrip("# ").strip()]
+    return [
+        line.lstrip("# ").strip()
+        for line in text.splitlines()
+        if re.match(r"^#{1,6}\s+", line) and line.lstrip("# ").strip()
+    ]
 
 
 def parse_markdown(path: Path, root: Path) -> tuple[str, list[AdoptionProposal]]:
@@ -50,7 +54,11 @@ def parse_markdown(path: Path, root: Path) -> tuple[str, list[AdoptionProposal]]
         raise MemoryledgerError("ALREADY_GENERATED", "target is already generated")
     digest = source_hash(text)
     rel = path.resolve().relative_to(root.resolve()).as_posix()
-    title = source_headings(text)[0] if source_headings(text) else "Original repository guidelines"
+    title = (
+        source_headings(text)[0]
+        if source_headings(text)
+        else "Original repository guidelines"
+    )
     proposals = [
         AdoptionProposal(
             f"Full migrated source: {title}",
@@ -74,15 +82,21 @@ def adoption_plan(path: Path, root: Path) -> dict[str, object]:
         "headings": source_headings(text),
         "line_count": len(text.splitlines()),
         "word_count": len(text.split()),
-        "proposals": [p.to_dict() | {"likely_placement": "linked_doc"} for p in proposals],
+        "proposals": [
+            p.to_dict() | {"likely_placement": "linked_doc"} for p in proposals
+        ],
         "root_expected_to_shrink": bool(root_lines or len(text) > 500),
         "mutated": False,
     }
 
 
-def adopt(store: Store, target: Path, *, backup: bool, accept: bool, reason: str) -> tuple[list[str], Path]:
+def adopt(
+    store: Store, target: Path, *, backup: bool, accept: bool, reason: str
+) -> tuple[list[str], Path]:
     if not backup:
-        raise MemoryledgerError("ADOPTION_BACKUP_REQUIRED", "adoption requires --backup")
+        raise MemoryledgerError(
+            "ADOPTION_BACKUP_REQUIRED", "adoption requires --backup"
+        )
     initial_hash, proposals = parse_markdown(target, store.config.root)
     existing = {memory.origin: memory for memory in store.all_memories()}
     rel = target.relative_to(store.config.root).as_posix()
@@ -103,7 +117,12 @@ def adopt(store: Store, target: Path, *, backup: bool, accept: bool, reason: str
             origin_hash=proposal.source_hash,
         )
     ids: list[str] = []
-    evidence = EvidenceRef(kind="file", title="Original manual agent file", uri=rel, content_hash=initial_hash)
+    evidence = EvidenceRef(
+        kind="file",
+        title="Original manual agent file",
+        uri=rel,
+        content_hash=initial_hash,
+    )
     for proposal in proposals:
         old = existing.get(proposal.origin)
         if old and old.origin_hash == proposal.source_hash:
@@ -128,9 +147,13 @@ def adopt(store: Store, target: Path, *, backup: bool, accept: bool, reason: str
     result = render_all(store.config)
     if source_hash(target.read_text()) != initial_hash:
         raise MemoryledgerError("ADOPTION_SOURCE_CHANGED", "manual target changed")
-    extra_targets = [(store.config.root / rel, text) for rel, text in result.linked_docs.items()]
+    extra_targets = [
+        (store.config.root / rel, text) for rel, text in result.linked_docs.items()
+    ]
     if store.config.render.nested_agents_enabled:
-        extra_targets.extend((store.config.root / rel, text) for rel, text in result.nested_docs.items())
+        extra_targets.extend(
+            (store.config.root / rel, text) for rel, text in result.nested_docs.items()
+        )
     for path, _text in extra_targets:
         safe_to_replace(path)
     backup_path = _backup_path(target)
@@ -150,10 +173,22 @@ def adopt(store: Store, target: Path, *, backup: bool, accept: bool, reason: str
 def verify_adoption(store: Store, source: Path) -> dict[str, object]:
     text = source.read_text()
     digest = source_hash(text)
-    memories = [m for m in store.all_memories() if m.origin_hash == digest and m.kind == "document"]
-    represented = any(any(ref.content_hash == digest for ref in m.evidence_refs) or m.origin_hash == digest for m in memories)
+    memories = [
+        m
+        for m in store.all_memories()
+        if m.origin_hash == digest and m.kind == "document"
+    ]
+    represented = any(
+        any(ref.content_hash == digest for ref in m.evidence_refs)
+        or m.origin_hash == digest
+        for m in memories
+    )
     result = render_all(store.config)
-    generated = {store.config.render.root_agents_path: result.root_text, **result.linked_docs, **result.nested_docs}
+    generated = {
+        store.config.render.root_agents_path: result.root_text,
+        **result.linked_docs,
+        **result.nested_docs,
+    }
     full_reachable = False
     root = result.root_text
     for rel, doc in result.linked_docs.items():

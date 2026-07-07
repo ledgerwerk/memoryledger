@@ -15,11 +15,25 @@ from .evidence_scan import scan as scan_evidence
 from .guardrails import validate_memory, validate_scope_path
 from .intake import import_run_html as intake_run_html
 from .intake import import_text as intake_text
-from .models import EVIDENCE_KINDS, KINDS, RENDER_TARGETS, SCOPES, STATUSES, Config, EvidenceRef
+from .models import (
+    EVIDENCE_KINDS,
+    KINDS,
+    RENDER_TARGETS,
+    SCOPES,
+    STATUSES,
+    Config,
+    EvidenceRef,
+)
 from .render import export as export_rendered
 from .render import render_all, write_rendered
 from .review import transition
-from .storage import Store, find_config, init_workspace, load_config
+from .storage import (
+    Store,
+    find_config,
+    init_workspace,
+    linked_docs_dir_migration,
+    load_config,
+)
 from .templates import (
     apply_template,
     find_template,
@@ -37,6 +51,7 @@ agents_app = typer.Typer(no_args_is_help=True)
 templates_app = typer.Typer(no_args_is_help=True)
 scan_app = typer.Typer(no_args_is_help=True)
 schema_app = typer.Typer(no_args_is_help=True)
+migrate_app = typer.Typer(no_args_is_help=True)
 app.add_typer(memory_app, name="memory")
 memory_app.add_typer(evidence_app, name="evidence")
 app.add_typer(review_app, name="review")
@@ -45,6 +60,7 @@ app.add_typer(agents_app, name="agents")
 app.add_typer(templates_app, name="templates")
 app.add_typer(scan_app, name="evidence")
 app.add_typer(schema_app, name="schema")
+app.add_typer(migrate_app, name="migrate")
 
 
 def _json(data: object) -> None:
@@ -76,13 +92,29 @@ def _handle_error(exc: Exception) -> None:
     raise exc
 
 
-def _validate_choice(name: str, value: str, choices: tuple[str, ...]) -> None:
-    if value not in choices:
+KIND_ALIASES = {"package-workflow": "procedure", "package_workflow": "procedure"}
+SCOPE_ALIASES = {"project": "repo"}
+RENDER_TARGET_ALIASES: dict[str, str] = {}
+
+
+def _normalize_choice(name: str, value: str) -> str:
+    aliases = {
+        "kind": KIND_ALIASES,
+        "scope": SCOPE_ALIASES,
+        "render_target": RENDER_TARGET_ALIASES,
+    }[name]
+    return aliases.get(value, value)
+
+
+def _validate_choice(name: str, value: str, choices: tuple[str, ...]) -> str:
+    normalized = _normalize_choice(name, value)
+    if normalized not in choices:
         valid = ", ".join(choices)
         raise MemoryledgerError(
             f"INVALID_{name.upper()}",
             f"invalid {name} '{value}'. Valid: {valid}",
         )
+    return normalized
 
 
 def _schema_values() -> dict[str, list[str]]:
@@ -203,9 +235,9 @@ def memory_create(
     section: str = typer.Option("", "--section"),
 ) -> None:
     try:
-        _validate_choice("kind", kind, KINDS)
-        _validate_choice("scope", scope, SCOPES)
-        _validate_choice("render_target", render_target, RENDER_TARGETS)
+        kind = _validate_choice("kind", kind, KINDS)
+        scope = _validate_choice("scope", scope, SCOPES)
+        render_target = _validate_choice("render_target", render_target, RENDER_TARGETS)
         config, store = _load()
         validate_scope_path(config.root, scope_path)
         content = _read_input(text, file, stdin)
@@ -457,7 +489,9 @@ def review_accept(
             _review_bulk("accepted", reason, json_output)
             return
         if memory_id is None:
-            raise MemoryledgerError("MISSING_MEMORY_ID", "memory id is required unless --all is used")
+            raise MemoryledgerError(
+                "MISSING_MEMORY_ID", "memory id is required unless --all is used"
+            )
         memory_status(memory_id, "accepted", reason)
     except Exception as exc:
         _handle_error(exc)
@@ -475,7 +509,9 @@ def review_reject(
             _review_bulk("rejected", reason, json_output)
             return
         if memory_id is None:
-            raise MemoryledgerError("MISSING_MEMORY_ID", "memory id is required unless --all is used")
+            raise MemoryledgerError(
+                "MISSING_MEMORY_ID", "memory id is required unless --all is used"
+            )
         memory_status(memory_id, "rejected", reason)
     except Exception as exc:
         _handle_error(exc)
@@ -526,6 +562,111 @@ def export(
         else:
             for path in written:
                 typer.echo(path)
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@app.command()
+def finalize(
+    accept_all: bool = typer.Option(False, "--accept-all", "--accept-candidates"),
+    reason: str = typer.Option("", "--reason"),
+    render_step: bool = typer.Option(True, "--render/--no-render"),
+    export_step: bool = typer.Option(False, "--export/--no-export"),
+    json_output: bool = typer.Option(False, "--json"),
+    backup: bool = False,
+    include_nested: bool = False,
+    out: Path | None = None,
+) -> None:
+    try:
+        config, store = _load()
+        accepted: list[str] = []
+        steps: list[str] = []
+        if accept_all:
+            if not reason.strip():
+                raise MemoryledgerError(
+                    "MISSING_REASON", "finalize acceptance requires --reason"
+                )
+            for memory in store.all_memories():
+                if memory.status == "candidate":
+                    transition(store, memory.id, "accepted", reason)
+                    accepted.append(memory.id)
+            steps.append("accept")
+        rendered: list[str] = []
+        exported: list[str] = []
+        if render_step or export_step:
+            result = render_all(config)
+        if render_step:
+            rendered = [str(path) for path in write_rendered(config, result, out)]
+            steps.append("render")
+        if export_step:
+            exported = [
+                str(path)
+                for path in export_rendered(config, result, out, backup, include_nested)
+            ]
+            steps.append("export")
+        data = {
+            "accepted": accepted,
+            "rendered": rendered,
+            "exported": exported,
+            "steps": steps,
+        }
+        if json_output:
+            _json(data)
+        else:
+            for key in ("accepted", "rendered", "exported"):
+                for value in data[key]:
+                    typer.echo(value)
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@migrate_app.command("storage-v2")
+def migrate_storage_v2(
+    plan: bool = typer.Option(False, "--plan"),
+    apply: bool = typer.Option(False, "--apply"),
+    backup: bool = False,
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    try:
+        if plan == apply:
+            raise MemoryledgerError(
+                "INVALID_ARGUMENT", "choose exactly one of --plan or --apply"
+            )
+        _config, store = _load()
+        data = (
+            store.storage_v2_plan() if plan else store.migrate_storage_v2(backup=backup)
+        )
+        if json_output:
+            _json(data)
+        else:
+            paths = data.get("changed" if apply else "create", [])
+            for path in paths if isinstance(paths, list) else []:
+                typer.echo(str(path))
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@migrate_app.command("linked-docs-dir")
+def migrate_linked_docs_dir(
+    from_dir: str = typer.Option("docs/agents", "--from"),
+    to_dir: str = typer.Option("agent_docs", "--to"),
+    plan: bool = typer.Option(False, "--plan"),
+    apply: bool = typer.Option(False, "--apply"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    try:
+        if plan == apply:
+            raise MemoryledgerError(
+                "INVALID_ARGUMENT", "choose exactly one of --plan or --apply"
+            )
+        config = load_config()
+        data = linked_docs_dir_migration(config, from_dir, to_dir, apply=apply)
+        if json_output:
+            _json(data)
+        else:
+            moved = data["move"]
+            for path in moved if isinstance(moved, list) else []:
+                typer.echo(str(path))
     except Exception as exc:
         _handle_error(exc)
 
@@ -587,8 +728,10 @@ def agents_adopt(
         elif apply:
             typer.echo("\n".join(ids))
         else:
-            for proposal in data["proposals"]:
-                typer.echo(f"{proposal['kind']} {proposal['title']}")
+            proposals = data.get("proposals", [])
+            for proposal in proposals if isinstance(proposals, list) else []:
+                if isinstance(proposal, dict):
+                    typer.echo(f"{proposal['kind']} {proposal['title']}")
     except Exception as exc:
         _handle_error(exc)
 
@@ -616,8 +759,11 @@ def agents_verify_adoption(
             _json(data)
         else:
             typer.echo("ok" if data["ok"] else "failed")
-            if data["missing_headings"]:
-                typer.echo("missing headings: " + ", ".join(data["missing_headings"]))
+            missing = data["missing_headings"]
+            if isinstance(missing, list) and missing:
+                typer.echo(
+                    "missing headings: " + ", ".join(str(item) for item in missing)
+                )
         if not data["ok"]:
             raise typer.Exit(1)
     except typer.Exit:

@@ -1,7 +1,0 @@
-- Preserve deterministic `memory-NNNN` IDs from storage metadata.
-- Preserve default status `candidate` and default priority `100`.
-- Preserve durable `content.md`, optional `evidence.md`, and first version records under `versions/`.
-- Review transitions require a reason.
-- Accepted memory must be validated before status update.
-- Valid statuses are `candidate`, `accepted`, `rejected`, and `archived`.
-- Do not allow unreviewed candidate memory to appear in generated output by default.
