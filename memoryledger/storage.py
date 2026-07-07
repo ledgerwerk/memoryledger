@@ -572,9 +572,9 @@ def linked_docs_dir_migration(
     if src.exists():
         for path in sorted(p for p in src.rglob("*") if p.is_file()):
             if GENERATED_MARKER in path.read_text():
-                movable.append(str(path.relative_to(config.root)))
+                movable.append(path.relative_to(config.root).as_posix())
             else:
-                skipped.append(str(path.relative_to(config.root)))
+                skipped.append(path.relative_to(config.root).as_posix())
     if apply:
         for rel in movable:
             source = config.root / rel
