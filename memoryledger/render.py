@@ -134,7 +134,7 @@ def render_all(config: Config) -> RenderResult:
             "# Evidence index",
             "",
             GENERATED_MARKER,
-            "<!-- Source: .memoryledger; regenerate with `memoryledger render` and `memoryledger export`. -->",
+            "<!-- Source: memoryledger records; regenerate with `memoryledger render` and `memoryledger export`. -->",
             "",
         ]
         for memory in memories:
@@ -170,7 +170,7 @@ def _render_root(
         "# AGENTS.md",
         "",
         GENERATED_MARKER,
-        "<!-- Source: .memoryledger; regenerate with `memoryledger render` and `memoryledger export`. -->",
+        "<!-- Source: memoryledger records; regenerate with `memoryledger render` and `memoryledger export`. -->",
         "",
         "## Project memory policy",
         "",
@@ -290,11 +290,19 @@ def write_rendered(
     config: Config, result: RenderResult, out: Path | None = None
 ) -> list[Path]:
     written: list[Path] = []
-    root_path = out or config.storage_dir / "rendered" / "AGENTS.md"
+    base = (
+        (
+            (config.artifacts_dir / "rendered")
+            if config.artifacts_dir
+            else (config.storage_dir / "rendered")
+        )
+        if out is None
+        else out.parent
+    )
+    root_path = out or base / "AGENTS.md"
     root_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(root_path, result.root_text)
     written.append(root_path)
-    base = config.storage_dir / "rendered"
     for rel, text in result.linked_docs.items():
         path = base / rel
         path.parent.mkdir(parents=True, exist_ok=True)

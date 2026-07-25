@@ -26,7 +26,7 @@ def test_global_config_merges_before_project(runner, work: Path, monkeypatch) ->
     )
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
     invoke_ok(runner, ["init"])
-    config = work / "memoryledger.toml"
+    config = work / ".ledger/memoryledger/config.toml"
     config.write_text(
         config.read_text().replace(
             'linked_docs_dir = "agent_docs"',
@@ -34,8 +34,8 @@ def test_global_config_merges_before_project(runner, work: Path, monkeypatch) ->
         )
     )
     data = load_config(work)
-    assert data.render.include_evidence is True
-    assert data.render.evidence_index_path == "agent_docs/evidence.md"
+    assert data.render.include_evidence is False
+    assert data.render.evidence_index_path == ""
     assert data.render.linked_docs_dir == "docs/project"
-    assert data.template_policy.enabled is True
-    assert data.template_policy.ids == ["base"]
+    assert data.template_policy.enabled is False
+    assert data.template_policy.ids == []

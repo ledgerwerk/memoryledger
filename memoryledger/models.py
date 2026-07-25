@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Literal
 
 KINDS = ("rule", "learning", "episode", "procedure", "semantic", "document", "local")
 STATUSES = ("candidate", "accepted", "rejected", "archived")
@@ -169,7 +170,94 @@ class Config:
     allow_current_run: bool = True
     default_review_status: str = "candidate"
     template_policy: TemplatePolicy = field(default_factory=TemplatePolicy)
+    artifacts_dir: Path | None = None
 
     @property
     def storage_dir(self) -> Path:
         return self.root / self.memoryledger_dir
+
+
+LayoutSource = Literal["canonical", "legacy"]
+
+
+@dataclass(frozen=True)
+class ToolConfig:
+    """Project-local settings independent of resolved paths."""
+
+    config_version: int
+    ledger_code: str
+    ledger_version: int
+    render: RenderConfig
+    allow_run_html: bool
+    allow_current_run: bool
+    default_review_status: str
+    template_policy: TemplatePolicy
+
+
+@dataclass(frozen=True)
+class WorkspacePaths:
+    """Resolved paths for one active Memoryledger layout."""
+
+    project_root: Path
+    manifest_path: Path | None
+    local_config_path: Path | None
+    config_path: Path
+    data_dir: Path
+    artifacts_dir: Path | None
+    config_binding_path: Path | None
+    data_binding_path: Path | None
+    artifacts_binding_path: Path | None
+    layout_source: LayoutSource
+
+    @property
+    def storage_dir(self) -> Path:
+        return self.data_dir
+
+
+@dataclass(frozen=True)
+class Workspace:
+    config: ToolConfig
+    paths: WorkspacePaths
+    project_name: str
+    project_uuid: str
+
+
+@dataclass(frozen=True)
+class StorageDiscovery:
+    project_root: Path
+    canonical_manifest: Path | None
+    canonical_registered: bool
+    canonical_config: Path | None
+    canonical_data: Path | None
+    canonical_populated: bool
+    canonical_valid: bool
+    legacy_config: Path | None
+    legacy_data: Path | None
+    legacy_populated: bool
+    completed_migration_journal: Path | None
+    status: Literal[
+        "uninitialized",
+        "canonical",
+        "legacy",
+        "migration-required",
+        "ambiguous",
+        "incomplete",
+        "conflict",
+    ]
+
+
+@dataclass(frozen=True)
+class DerivedState:
+    ledger_version: int
+    next_memory_number: int
+    next_import_number: int
+
+
+@dataclass(frozen=True)
+class LegacyInventory:
+    config_path: Path
+    data_dir: Path
+    memory_ids: tuple[str, ...]
+    import_ids: tuple[str, ...]
+    regular_files: tuple[Path, ...]
+    derived_state: DerivedState

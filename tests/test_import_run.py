@@ -74,7 +74,7 @@ def test_structured_run_prevalidates_all_candidates(runner, work) -> None:
         ["import", "run-html", "--file", str(path)],
     )
     assert result.exit_code == 1
-    assert not list((work / ".memoryledger/memories").iterdir())
+    assert not list((work / ".ledger/memoryledger/data/memories").iterdir())
 
 
 def test_import_real_run_html_extracts_visible_candidates_and_run_evidence(

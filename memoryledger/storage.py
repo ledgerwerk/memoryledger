@@ -11,6 +11,7 @@ try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore[no-redef]
+import ledgercore
 import yaml
 from ledgercore.atomic import atomic_write_text
 
@@ -29,32 +30,31 @@ CONFIG_NAMES = ("memoryledger.toml", ".memoryledger.toml")
 
 
 def _dump_yaml(data: dict[str, object]) -> str:
-    return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+    # Keep one public adapter so storage and migration use Ledgercore's YAML
+    # serialization rules without changing the record-facing API.
+    import tempfile
+
+    with tempfile.NamedTemporaryFile() as handle:
+        path = Path(handle.name)
+    try:
+        return yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     return data if isinstance(data, dict) else {}
 
 
 def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
-    if not text.startswith("---\n"):
-        raise MemoryledgerError(
-            "INVALID_MEMORY_FILE", "memory file is missing front matter"
-        )
-    end = text.find("\n---\n", 4)
-    if end == -1:
-        raise MemoryledgerError(
-            "INVALID_MEMORY_FILE", "memory file has unterminated front matter"
-        )
-    raw = yaml.safe_load(text[4:end]) or {}
-    if not isinstance(raw, dict):
-        raise MemoryledgerError(
-            "INVALID_MEMORY_FILE", "memory front matter must be a map"
-        )
-    return raw, text[end + 5 :].lstrip("\n")
+    try:
+        raw, body = ledgercore.split_front_matter_text(text)
+    except Exception as exc:
+        raise MemoryledgerError("INVALID_MEMORY_FILE", str(exc)) from exc
+    return raw, body.lstrip("\n")
 
 
 def _frontmatter_text(memory: Memory, content: str) -> str:
@@ -62,7 +62,9 @@ def _frontmatter_text(memory: Memory, content: str) -> str:
     refs = data.pop("evidence_refs", [])
     if refs:
         data["evidence"] = refs
-    return f"---\n{_dump_yaml(data)}---\n\n{content.rstrip()}\n"
+    return ledgercore.render_front_matter_text(
+        data, f"\n{content.rstrip()}\n", key_order=list(data)
+    )
 
 
 def _load_evidence_refs(path: Path) -> list[EvidenceRef]:
@@ -179,6 +181,16 @@ def find_config(start: Path | None = None) -> Path | None:
 
 
 def load_config(start: Path | None = None) -> Config:
+    from .project import resolve_workspace, workspace_as_compat_config
+
+    try:
+        workspace = resolve_workspace(start)
+    except MemoryledgerError as exc:
+        if exc.code not in {"NO_CONFIG", "INVALID_LEDGER_LAYOUT", "MIGRATION_REQUIRED"}:
+            raise
+    else:
+        if workspace.paths.layout_source == "canonical":
+            return workspace_as_compat_config(workspace)
     path = find_config(start)
     if path is None:
         raise MemoryledgerError("NO_CONFIG", "Run `memoryledger init` first.")
@@ -254,18 +266,14 @@ def load_config(start: Path | None = None) -> Config:
 def init_workspace(
     project_name: str | None, memoryledger_dir: str, hidden_config: bool
 ) -> Config:
-    root = Path.cwd().resolve()
-    config_path = root / (
-        ".memoryledger.toml" if hidden_config else "memoryledger.toml"
-    )
-    if not config_path.exists():
-        atomic_write_text(
-            config_path,
-            default_config_text(project_name or root.name, memoryledger_dir),
+    if memoryledger_dir != ".memoryledger" or hidden_config:
+        raise MemoryledgerError(
+            "LEGACY_INIT_UNSUPPORTED",
+            "schema-3 initialization does not accept legacy config or storage options",
         )
-    config = load_config(root)
-    ensure_storage(config)
-    return config
+    from .project import init_canonical_workspace, workspace_as_compat_config
+
+    return workspace_as_compat_config(init_canonical_workspace(project_name))
 
 
 def ensure_storage(config: Config) -> None:
@@ -281,12 +289,36 @@ def ensure_storage(config: Config) -> None:
 class Store:
     def __init__(self, config: Config) -> None:
         self.config = config
-        ensure_storage(config)
+
+    def ensure_initialized(self) -> None:
+        """Create legacy durable state explicitly before a mutation."""
+
+        if (
+            self.config.config_path.name == "config.toml"
+            and self.config.config_path.parent.parent.name == ".ledger"
+        ):
+            legacy_config = self.config.root / "memoryledger.toml"
+            legacy_data = self.config.root / ".memoryledger"
+            journals = self.config.root / ".ledger" / "migrations"
+            complete = False
+            for journal in (
+                journals.glob("memoryledger-*.toml") if journals.exists() else []
+            ):
+                if 'phase = "complete"' in journal.read_text(encoding="utf-8"):
+                    complete = True
+                    break
+            if legacy_config.exists() and legacy_data.exists() and not complete:
+                raise MemoryledgerError(
+                    "STORAGE_LAYOUT_AMBIGUOUS",
+                    "legacy and canonical Memoryledger state coexist without a completed migration journal",
+                )
+        ensure_storage(self.config)
 
     def storage_meta(self) -> dict[str, Any]:
         return _load_yaml(self.config.storage_dir / "storage.yaml")
 
     def write_storage_meta(self, data: dict[str, object]) -> None:
+        self.config.storage_dir.mkdir(parents=True, exist_ok=True)
         atomic_write_text(self.config.storage_dir / "storage.yaml", _dump_yaml(data))
 
     def ledger_version(self) -> int:
@@ -297,6 +329,10 @@ class Store:
     def bump_ledger_version(self) -> int:
         old = self.ledger_version()
         new = old + 1
+        self.set_ledger_version(new)
+        return new
+
+    def set_ledger_version(self, new: int) -> None:
         text = self.config.config_path.read_text()
         if "[ledger]" not in text:
             text = f"[ledger]\nversion = {new}\n\n" + text
@@ -315,11 +351,15 @@ class Store:
         else:
             text = text.replace("[ledger]\n", f"[ledger]\nversion = {new}\n", 1)
         atomic_write_text(self.config.config_path, text)
-        return new
 
     def next_id(self) -> str:
+        self.ensure_initialized()
         meta = self.storage_meta()
-        number = int(meta.get("next_memory_number", 1))
+        existing = [memory.id for memory in self.all_memories()]
+        candidate = ledgercore.next_prefixed_id("memory", existing, width=4)
+        number = max(
+            int(meta.get("next_memory_number", 1)), int(candidate.rsplit("-", 1)[1])
+        )
         meta["next_memory_number"] = number + 1
         self.write_storage_meta(meta)
         return f"memory-{number:04d}"
@@ -332,6 +372,8 @@ class Store:
 
     def all_memories(self) -> list[Memory]:
         base = self.config.storage_dir / "memories"
+        if not base.exists():
+            return []
         items = [_load_memory(path) for path in sorted(base.glob("memory-*.md"))]
         for path in sorted(base.glob("memory-*/memory.yaml")):
             if not self.memory_file(path.parent.name).exists():
@@ -374,7 +416,8 @@ class Store:
         section: str = "",
         evidence_refs: list[EvidenceRef] | None = None,
     ) -> Memory:
-        version = self.bump_ledger_version()
+        self.ensure_initialized()
+        version = self.ledger_version() + 1
         memory = self.validate_new(
             kind,
             title,
@@ -390,6 +433,7 @@ class Store:
             evidence_refs=evidence_refs,
             version=version,
         )
+        self.set_ledger_version(version)
         memory = replace(memory, id=self.next_id())
         self.write(memory, content, evidence, "created")
         return memory
@@ -445,6 +489,7 @@ class Store:
             shutil.rmtree(legacy)
 
     def update_status(self, memory_id: str, status: str, reason: str) -> Memory:
+        self.ensure_initialized()
         old = self.get(memory_id)
         version = self.bump_ledger_version()
         refs = old.evidence_refs
@@ -475,6 +520,7 @@ class Store:
         append: bool = False,
         section: str | None = None,
     ) -> Memory:
+        self.ensure_initialized()
         old = self.get(memory_id)
         version = self.bump_ledger_version()
         body = (
@@ -497,6 +543,7 @@ class Store:
             raise MemoryledgerError(
                 "MISSING_REASON", "evidence changes require a reason"
             )
+        self.ensure_initialized()
         old = self.get(memory_id)
         version = self.bump_ledger_version()
         new = replace(
@@ -508,8 +555,15 @@ class Store:
         return new
 
     def next_import_id(self) -> str:
+        self.ensure_initialized()
         meta = self.storage_meta()
-        number = int(meta.get("next_import_number", 1))
+        existing = [
+            path.name for path in (self.config.storage_dir / "imports").glob("import-*")
+        ]
+        candidate = ledgercore.next_prefixed_id("import", existing, width=4)
+        number = max(
+            int(meta.get("next_import_number", 1)), int(candidate.rsplit("-", 1)[1])
+        )
         meta["next_import_number"] = number + 1
         self.write_storage_meta(meta)
         return f"import-{number:04d}"
@@ -534,7 +588,12 @@ class Store:
         plan = self.storage_v2_plan()
         changed: list[str] = []
         base = self.config.storage_dir / "memories"
-        legacy_ids = [str(item) for item in plan["legacy_memories"]]
+        raw_legacy_ids = plan.get("legacy_memories", [])
+        legacy_ids = (
+            [str(item) for item in raw_legacy_ids]
+            if isinstance(raw_legacy_ids, list)
+            else []
+        )
         for memory_id in legacy_ids:
             memory = self.get(memory_id)
             content = self.read_content(memory_id)

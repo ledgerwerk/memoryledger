@@ -15,6 +15,7 @@ from .evidence_scan import scan as scan_evidence
 from .guardrails import validate_memory, validate_scope_path
 from .intake import import_run_html as intake_run_html
 from .intake import import_text as intake_text
+from .migration import apply_plan, build_plan, cleanup_legacy, recover_plan, write_plan
 from .models import (
     EVIDENCE_KINDS,
     KINDS,
@@ -24,15 +25,19 @@ from .models import (
     Config,
     EvidenceRef,
 )
+from .project import (
+    discover_storage,
+    ensure_artifacts,
+    resolve_workspace,
+    workspace_as_compat_config,
+)
 from .render import export as export_rendered
 from .render import render_all, write_rendered
 from .review import transition
 from .storage import (
     Store,
-    find_config,
     init_workspace,
     linked_docs_dir_migration,
-    load_config,
 )
 from .templates import (
     apply_template,
@@ -52,6 +57,7 @@ templates_app = typer.Typer(no_args_is_help=True)
 scan_app = typer.Typer(no_args_is_help=True)
 schema_app = typer.Typer(no_args_is_help=True)
 migrate_app = typer.Typer(no_args_is_help=True)
+storage_app = typer.Typer(no_args_is_help=True)
 app.add_typer(memory_app, name="memory")
 memory_app.add_typer(evidence_app, name="evidence")
 app.add_typer(review_app, name="review")
@@ -61,6 +67,7 @@ app.add_typer(templates_app, name="templates")
 app.add_typer(scan_app, name="evidence")
 app.add_typer(schema_app, name="schema")
 app.add_typer(migrate_app, name="migrate")
+app.add_typer(storage_app, name="storage")
 
 
 def _json(data: object) -> None:
@@ -68,7 +75,7 @@ def _json(data: object) -> None:
 
 
 def _load() -> tuple[Config, Store]:
-    config = load_config()
+    config = workspace_as_compat_config(resolve_workspace())
     return config, Store(config)
 
 
@@ -154,8 +161,8 @@ def status(
     check: bool = False, json_output: bool = typer.Option(False, "--json")
 ) -> None:
     try:
-        config_path = find_config()
-        if config_path is None:
+        discovery = discover_storage()
+        if discovery.status == "uninitialized":
             data = {"ok": False, "configured": False}
             if json_output:
                 _json(data)
@@ -172,6 +179,8 @@ def status(
             "config": str(config.config_path),
             "storage": str(config.storage_dir),
             "memories": len(memories),
+            "layout": discovery.status,
+            "canonical": discovery.canonical_registered,
         }
         if json_output:
             _json(status_data)
@@ -187,10 +196,11 @@ def status(
 def doctor(json_output: bool = typer.Option(False, "--json")) -> None:
     try:
         config, _store = _load()
+        discovery = discover_storage()
         issues: list[str] = []
         if not config.storage_dir.exists():
             issues.append("storage directory missing")
-        data = {"ok": not issues, "issues": issues}
+        data = {"ok": not issues, "issues": issues, "layout": discovery.status}
         if json_output:
             _json(data)
         else:
@@ -207,16 +217,147 @@ def info(
 ) -> None:
     try:
         config, _store = _load()
+        discovery = discover_storage()
         data = {
             "config": str(config.config_path),
             "root": str(config.root),
             "storage": str(config.storage_dir),
+            "layout": discovery.status,
+            "project_uuid": config.project_uuid,
+            "project_name": config.project_name,
         }
         if json_output:
             _json(data)
         else:
             for value in data.values() if paths_only else data.items():
                 typer.echo(value if paths_only else f"{value[0]}: {value[1]}")
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@storage_app.command("where")
+def storage_where(json_output: bool = typer.Option(False, "--json")) -> None:
+    try:
+        discovery = discover_storage()
+        data = {
+            "status": discovery.status,
+            "project_root": str(discovery.project_root),
+            "manifest": str(discovery.canonical_manifest)
+            if discovery.canonical_manifest
+            else None,
+            "config": str(discovery.canonical_config)
+            if discovery.canonical_config
+            else None,
+            "data": str(discovery.canonical_data)
+            if discovery.canonical_data
+            else str(discovery.legacy_data)
+            if discovery.legacy_data
+            else None,
+            "legacy_config": str(discovery.legacy_config)
+            if discovery.legacy_config
+            else None,
+        }
+        if json_output:
+            _json(data)
+        else:
+            for key, value in data.items():
+                typer.echo(f"{key}: {value}")
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@storage_app.command("verify")
+def storage_verify(
+    strict: bool = typer.Option(False, "--strict"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    try:
+        discovery = discover_storage()
+        ok = discovery.status in {"canonical", "legacy", "uninitialized"}
+        if strict and discovery.status == "canonical":
+            resolve_workspace()
+        data = {"ok": ok, "status": discovery.status, "strict": strict}
+        if json_output:
+            _json(data)
+        else:
+            typer.echo("ok" if ok else f"invalid: {discovery.status}")
+        if not ok:
+            raise typer.Exit(1)
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@storage_app.command("migrate")
+def storage_migrate(
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    plan_file: Path | None = typer.Option(None, "--plan-file"),
+    adopt_project_uuid: bool = typer.Option(False, "--adopt-project-uuid"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    try:
+        plan = build_plan(adopt_project_uuid=adopt_project_uuid)
+        saved = write_plan(plan, plan_file)
+        data = plan.to_dict()
+        data["plan_file"] = str(saved)
+        if not dry_run:
+            data.update(apply_plan(plan, adopt_project_uuid=adopt_project_uuid))
+        if json_output:
+            _json(data)
+        else:
+            typer.echo(f"Migration: {plan.migration_id}")
+            typer.echo("Source layout: legacy")
+            typer.echo(f"Legacy data: {plan.source_data}")
+            typer.echo(f"Target data: {plan.target_data}")
+            typer.echo(f"Version: {plan.target_version}")
+            typer.echo(f"Next memory: {plan.next_memory_number:04d}")
+            typer.echo("Activation: manifest update last")
+            if not dry_run:
+                typer.echo("Phase: complete")
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@storage_app.command("recover")
+def storage_recover(
+    journal: Path = typer.Option(..., "--journal"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    try:
+        plan = build_plan()
+        if (
+            journal
+            != plan.root / ".ledger" / "migrations" / f"{plan.migration_id}.toml"
+        ):
+            raise MemoryledgerError(
+                "STORAGE_MIGRATION_CONFLICT",
+                "journal does not match the deterministic migration plan",
+            )
+        data = recover_plan(plan)
+        _json(data) if json_output else typer.echo(
+            f"{data['migration_id']}: {data['phase']}"
+        )
+    except Exception as exc:
+        _handle_error(exc)
+
+
+@storage_app.command("cleanup-legacy")
+def storage_cleanup_legacy(
+    yes: bool = typer.Option(False, "--yes"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    discard_rendered: bool = typer.Option(False, "--discard-rendered"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    try:
+        plan = build_plan()
+        data = cleanup_legacy(
+            plan, confirm=yes and not dry_run, discard_rendered=discard_rendered
+        )
+        removals = data.get("remove", [])
+        _json(data) if json_output else typer.echo(
+            "\n".join(str(item) for item in removals)
+            if isinstance(removals, list)
+            else ""
+        )
     except Exception as exc:
         _handle_error(exc)
 
@@ -529,11 +670,15 @@ def render(
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
     try:
-        config = load_config()
+        workspace = resolve_workspace()
+        config = workspace_as_compat_config(workspace)
         result = render_all(config)
-        written = write_rendered(config, result, out)
         if print_output:
             typer.echo(result.root_text, nl=False)
+            written: list[Path] = []
+        else:
+            ensure_artifacts(workspace)
+            written = write_rendered(config, result, out)
         if json_output:
             _json(
                 {
@@ -554,7 +699,7 @@ def export(
     include_nested: bool = False,
 ) -> None:
     try:
-        config = load_config()
+        config, _store = _load()
         result = render_all(config)
         written = export_rendered(config, result, out, backup, include_nested)
         if json_output:
@@ -596,6 +741,7 @@ def finalize(
         if render_step or export_step:
             result = render_all(config)
         if render_step:
+            ensure_artifacts(resolve_workspace())
             rendered = [str(path) for path in write_rendered(config, result, out)]
             steps.append("render")
         if export_step:
@@ -659,7 +805,7 @@ def migrate_linked_docs_dir(
             raise MemoryledgerError(
                 "INVALID_ARGUMENT", "choose exactly one of --plan or --apply"
             )
-        config = load_config()
+        config, _store = _load()
         data = linked_docs_dir_migration(config, from_dir, to_dir, apply=apply)
         if json_output:
             _json(data)

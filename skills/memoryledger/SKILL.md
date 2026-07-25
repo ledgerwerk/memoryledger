@@ -101,6 +101,22 @@ and part of the agent context.
 
 ## Storage and linked-doc migrations
 
+Canonical durable Memoryledger state is owned by Ledgercore schema 3:
+
+- shared manifest: `.ledger/ledger.toml`
+- project tool config: `.ledger/memoryledger/config.toml`
+- durable data: `.ledger/memoryledger/data/`
+- rendered previews: the resolved `artifacts` cache mount
+
+Use `memoryledger storage where` and `memoryledger storage verify --strict` for
+read-only diagnostics. Do not manually copy `.memoryledger` into `.ledger`.
+Migrate an existing legacy project explicitly with
+`memoryledger storage migrate --dry-run`, then
+`memoryledger storage migrate`; use `storage recover` for an interrupted
+migration and `storage cleanup-legacy --dry-run` before any removal. Migration
+is copy-first, hash-verified, manifest-last, and retains the legacy source until
+verified cleanup.
+
 Storage v2 uses one front-matter Markdown file per memory under `.memoryledger/memories/`.
 Use `memoryledger migrate storage-v2 --plan` before `--apply --backup` when converting legacy sidecar records.
 Generated linked documents default to `agent_docs/`. Use `memoryledger migrate linked-docs-dir --from docs/agents --to agent_docs --plan` before `--apply`; it moves only files containing the generated marker.

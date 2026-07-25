@@ -4,6 +4,7 @@ import base64
 import json
 import re
 from dataclasses import dataclass
+from typing import cast
 
 from .errors import MemoryledgerError
 
@@ -188,7 +189,9 @@ def _decode_real_session_export(data: dict) -> list[RunProposal]:
         entry_id = str(raw.get("id", ""))
         if not entry_id:
             continue
-        msg = raw.get("message") if isinstance(raw.get("message"), dict) else {}
+        msg = cast(
+            dict, raw.get("message") if isinstance(raw.get("message"), dict) else {}
+        )
         role = str(msg.get("role", ""))
         text = _visible_text_from_message(msg)
         if not text or len(text) > MAX_ENTRY_CHARS:

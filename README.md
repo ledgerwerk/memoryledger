@@ -3,7 +3,8 @@
 `memoryledger` is an auditable long-term project memory ledger and deterministic `AGENTS.md` renderer.
 
 `AGENTS.md` is a generated entry point. Canonical durable memory lives in
-`.memoryledger/`.
+`.ledger/memoryledger/data/`; rendered previews live in the resolved Ledgercore
+`artifacts` cache mount.
 
 ## Quick start
 
@@ -18,6 +19,33 @@ memoryledger export
 ```
 
 The short alias `memledger` exposes the same CLI.
+
+New projects use the shared Ledgercore schema-3 manifest at `.ledger/ledger.toml`,
+with tool config at `.ledger/memoryledger/config.toml` and durable records under
+`.ledger/memoryledger/data/`. Initialization creates exact `data=project` and
+`artifacts=cache` mounts and binding markers; the artifacts cache is initialized
+only when a preview is written.
+
+Inspect layout without creating state with:
+
+```bash
+memoryledger storage where
+memoryledger storage verify --strict
+```
+
+Existing legacy projects migrate explicitly and copy-first:
+
+```bash
+memoryledger storage migrate --dry-run --json
+memoryledger storage migrate --plan-file .memoryledger-migration-plan.json
+memoryledger storage recover --journal .ledger/migrations/<migration-id>.toml
+memoryledger storage cleanup-legacy --dry-run
+```
+
+Migration preserves the legacy config and data until an explicitly confirmed
+cleanup. It rejects unsafe files and conflicting project identity or mount
+registrations, verifies copied regular files with SHA-256, and writes the shared
+manifest last.
 
 To build or update `AGENTS.md`, update memory records first, then render and
 export. Do not edit generated `AGENTS.md` files directly.
@@ -53,8 +81,9 @@ memory until explicit review. Structured evidence is managed with
 `memory evidence list/add`. Both `memoryledger` and `memledger` expose the same
 commands.
 
-Storage v2 stores each memory as `.memoryledger/memories/memory-NNNN.md` with
-YAML front matter. Legacy sidecar storage can be migrated with
+Storage v2 compatibility reads legacy records, while canonical records live at
+`.ledger/memoryledger/data/memories/memory-NNNN.md` with YAML front matter.
+Legacy sidecar storage can be normalized with
 `memoryledger migrate storage-v2 --plan` and
 `memoryledger migrate storage-v2 --apply --backup`. Generated linked documents now
 default to `agent_docs/`; migrate generated files only with

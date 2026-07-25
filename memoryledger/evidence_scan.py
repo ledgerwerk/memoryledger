@@ -114,10 +114,10 @@ def scan(root: Path) -> list[ScanProposal]:
         pre_commit = root / name
         if not pre_commit.exists():
             continue
-        line = 1
+        first_nonempty_line = 1
         for number, raw in enumerate(pre_commit.read_text().splitlines(), 1):
             if raw.strip():
-                line = number
+                first_nonempty_line = number
                 break
         proposals.append(
             _proposal(
@@ -128,7 +128,7 @@ def scan(root: Path) -> list[ScanProposal]:
                 "procedure",
                 "configured hooks",
                 "Run `pre-commit run --all-files` when changes affect repository-wide formatting, linting, or configured hooks.",
-                line,
+                first_nonempty_line,
                 render_target="linked_doc",
             )
         )

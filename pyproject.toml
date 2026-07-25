@@ -17,7 +17,7 @@ readme = "README.md"
 license = "Apache-2.0"
 dependencies = [
     "typer",
-    "ledgercore>=0.2,<0.6",
+    "ledgercore>=0.5.0,<0.6.0",
     "PyYAML",
     'tomli; python_version < "3.11"',
 ]

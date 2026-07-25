@@ -44,11 +44,15 @@ def test_evidence_add_list_and_version_snapshot(runner, work: Path) -> None:
     )
     assert listed["evidence"][0]["uri"] == "README.md"
     stored = yaml.safe_load(
-        (work / ".memoryledger/memories/memory-0001.md").read_text().split("---", 2)[1]
+        (work / ".ledger/memoryledger/data/memories/memory-0001.md")
+        .read_text()
+        .split("---", 2)[1]
     )
     assert stored["evidence"][0]["kind"] == "file"
     assert stored["modified_version"] == 2
-    assert not (work / ".memoryledger/memories/memory-0001/versions").exists()
+    assert not (
+        work / ".ledger/memoryledger/data/memories/memory-0001/versions"
+    ).exists()
 
 
 def test_acceptance_adds_structured_approval(runner, work: Path) -> None:
@@ -68,12 +72,12 @@ def test_acceptance_adds_structured_approval(runner, work: Path) -> None:
 
 def test_rendered_evidence_is_markdown_escaped(runner, work: Path) -> None:
     invoke_ok(runner, ["init"])
-    config = work / "memoryledger.toml"
+    config = work / ".ledger/memoryledger/config.toml"
     config.write_text(
-        config.read_text().replace(
-            "include_rejected = false",
-            "include_rejected = false\ninclude_evidence = true\n"
-            'evidence_index_path = "agent_docs/evidence.md"',
+        config.read_text()
+        .replace("include_evidence = false", "include_evidence = true")
+        .replace(
+            'evidence_index_path = ""', 'evidence_index_path = "agent_docs/evidence.md"'
         )
     )
     invoke_ok(
@@ -110,19 +114,23 @@ def test_rendered_evidence_is_markdown_escaped(runner, work: Path) -> None:
     )
     invoke_ok(runner, ["review", "accept", "memory-0001", "--reason", "Approved."])
     invoke_ok(runner, ["render"])
-    text = (work / ".memoryledger/rendered/agent_docs/procedures.md").read_text()
+    from memoryledger.project import resolve_workspace
+
+    text = (
+        resolve_workspace().paths.artifacts_dir / "rendered/agent_docs/procedures.md"
+    ).read_text()
     assert r"Source \[unsafe\]" in text
     assert r"a\_\(b\)" in text
 
 
 def test_root_render_points_to_evidence_index(runner, work: Path) -> None:
     invoke_ok(runner, ["init"])
-    config = work / "memoryledger.toml"
+    config = work / ".ledger/memoryledger/config.toml"
     config.write_text(
-        config.read_text().replace(
-            "include_rejected = false",
-            "include_rejected = false\ninclude_evidence = true\n"
-            'evidence_index_path = "agent_docs/evidence.md"',
+        config.read_text()
+        .replace("include_evidence = false", "include_evidence = true")
+        .replace(
+            'evidence_index_path = ""', 'evidence_index_path = "agent_docs/evidence.md"'
         )
     )
     invoke_ok(
@@ -148,8 +156,12 @@ def test_root_render_points_to_evidence_index(runner, work: Path) -> None:
     )
     invoke_ok(runner, ["review", "accept", "memory-0001", "--reason", "Approved."])
     invoke_ok(runner, ["render"])
-    root = (work / ".memoryledger/rendered/AGENTS.md").read_text()
-    index = (work / ".memoryledger/rendered/agent_docs/evidence.md").read_text()
+    from memoryledger.project import resolve_workspace
+
+    root = (resolve_workspace().paths.artifacts_dir / "rendered/AGENTS.md").read_text()
+    index = (
+        resolve_workspace().paths.artifacts_dir / "rendered/agent_docs/evidence.md"
+    ).read_text()
     assert (
         "<!-- memoryledger:evidence memory-0001 agent_docs/evidence.md#memory-0001 -->"
         in root

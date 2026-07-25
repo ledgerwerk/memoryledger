@@ -21,9 +21,9 @@ def test_storage_v2_create_writes_single_frontmatter_markdown(
         ["memory", "create", "--kind", "rule", "--title", "R", "--text", "Rule."],
     )
 
-    memory_file = work / ".memoryledger/memories/memory-0001.md"
+    memory_file = work / ".ledger/memoryledger/data/memories/memory-0001.md"
     assert memory_file.exists()
-    assert not (work / ".memoryledger/memories/memory-0001").exists()
+    assert not (work / ".ledger/memoryledger/data/memories/memory-0001").exists()
     data = _frontmatter(memory_file)
     assert data["created_version"] == 1
     assert data["modified_version"] == 1
@@ -43,16 +43,16 @@ def test_global_version_increments_once_per_mutation(runner, work: Path) -> None
         ["memory", "append", "memory-0001", "--text", "More.", "--reason", "Update."],
     )
 
-    config = work / "memoryledger.toml"
+    config = work / ".ledger/memoryledger/config.toml"
     assert "version = 2" in config.read_text()
-    data = _frontmatter(work / ".memoryledger/memories/memory-0001.md")
+    data = _frontmatter(work / ".ledger/memoryledger/data/memories/memory-0001.md")
     assert data["created_version"] == 1
     assert data["modified_version"] == 2
 
 
 def test_storage_v2_migration_removes_sidecars_and_versions(runner, work: Path) -> None:
     invoke_ok(runner, ["init"])
-    legacy = work / ".memoryledger/memories/memory-0001"
+    legacy = work / ".ledger/memoryledger/data/memories/memory-0001"
     (legacy / "versions").mkdir(parents=True)
     (legacy / "memory.yaml").write_text(
         "id: memory-0001\nkind: rule\ntitle: R\nstatus: candidate\npriority: 100\nscope: global\nscope_path: ''\nrender_target: root_agents\nsource: cli\ncreated_at: old\nupdated_at: old\nversion: 7\ntags: []\n"
@@ -69,7 +69,7 @@ def test_storage_v2_migration_removes_sidecars_and_versions(runner, work: Path) 
         invoke_ok(runner, ["migrate", "storage-v2", "--apply", "--json"]).output
     )
     assert "memory-0001" in result["legacy_memories"]
-    assert (work / ".memoryledger/memories/memory-0001.md").exists()
+    assert (work / ".ledger/memoryledger/data/memories/memory-0001.md").exists()
     assert not legacy.exists()
 
 
