@@ -1,0 +1,28 @@
+schema_version = 1
+migration_id = "2259f45c-253f-403a-bbb0-143d7d2f190c"
+project_uuid = "4a9cdcde-c739-4bcc-a558-1903f3a40e28"
+phase = "complete"
+
+[items.0]
+component = "config"
+tool = "releaseledger"
+mount = "config"
+source = "/data/data/com.termux/files/home/src/memoryledger/.ledger/releaseledger/.migration/61357ded-ed6e-478e-a3dc-5c90cd0476d7/config.toml"
+destination = "/data/data/com.termux/files/home/src/memoryledger/.ledger/releaseledger/config.toml"
+strategy = "copy"
+
+[items.1]
+component = "mount"
+tool = "releaseledger"
+mount = "data"
+source = "/data/data/com.termux/files/home/src/memoryledger/.ledger/releaseledger/.migration/61357ded-ed6e-478e-a3dc-5c90cd0476d7/data"
+destination = "/data/data/com.termux/files/home/src/memoryledger/.ledger/releaseledger/data"
+strategy = "copy"
+
+[items.2]
+component = "mount"
+tool = "releaseledger"
+mount = "indexes"
+source = "/data/data/com.termux/files/home/src/memoryledger/.ledger/releaseledger/.migration/61357ded-ed6e-478e-a3dc-5c90cd0476d7/data"
+destination = "/data/data/com.termux/files/home/.cache/ledgerwerk/releaseledger/4a9cdcde-c739-4bcc-a558-1903f3a40e28/memoryledger-d8da4f6d87ee/indexes"
+strategy = "rebuild"

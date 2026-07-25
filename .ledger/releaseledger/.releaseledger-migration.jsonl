@@ -1,0 +1,6 @@
+{"phase": "staging", "migration_id": "61357ded-ed6e-478e-a3dc-5c90cd0476d7", "legacy_data_root": "/data/data/com.termux/files/home/src/memoryledger/.releaseledger", "target_data_root": "/data/data/com.termux/files/home/src/memoryledger/.ledger/releaseledger/data"}
+{"phase": "ledgercore-executing", "migration_id": "61357ded-ed6e-478e-a3dc-5c90cd0476d7"}
+{"phase": "canonical-activated", "migration_id": "61357ded-ed6e-478e-a3dc-5c90cd0476d7"}
+{"phase": "indexes-rebuilt", "migration_id": "61357ded-ed6e-478e-a3dc-5c90cd0476d7"}
+{"phase": "domain-verified", "migration_id": "61357ded-ed6e-478e-a3dc-5c90cd0476d7"}
+{"phase": "complete", "migration_id": "61357ded-ed6e-478e-a3dc-5c90cd0476d7"}
