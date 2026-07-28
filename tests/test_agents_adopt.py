@@ -20,8 +20,8 @@ def test_adopt_preview_is_read_only_and_apply_requires_backup(runner, work) -> N
         __import__("memoryledger.cli", fromlist=["app"]).app,
         ["agents", "adopt", "--apply"],
     )
-    assert refused.exit_code == 1
-    assert "ADOPTION_BACKUP_REQUIRED" in refused.output
+    assert refused.exit_code == 4
+    assert "adoption_backup_required" in refused.output
 
 
 def test_adopt_backup_accept_and_retry_deduplicate(runner, work) -> None:

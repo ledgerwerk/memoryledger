@@ -30,16 +30,16 @@ Inspect layout without creating state with:
 
 ```bash
 memoryledger storage where
-memoryledger storage verify --strict
+memoryledger storage validate --strict
 ```
 
 Existing legacy projects migrate explicitly and copy-first:
 
 ```bash
-memoryledger storage migrate --dry-run --json
-memoryledger storage migrate --plan-file .memoryledger-migration-plan.json
-memoryledger storage recover --journal .ledger/migrations/<migration-id>.toml
-memoryledger storage cleanup-legacy --dry-run
+memoryledger migrate plan storage-layout
+memoryledger migrate apply storage-layout --dry-run
+memoryledger migrate recover --journal .ledger/migrations/<migration-id>.toml
+memoryledger migrate cleanup storage-layout --dry-run
 ```
 
 Migration preserves the legacy config and data until an explicitly confirmed
@@ -84,8 +84,8 @@ commands.
 Storage v2 compatibility reads legacy records, while canonical records live at
 `.ledger/memoryledger/data/memories/memory-NNNN.md` with YAML front matter.
 Legacy sidecar storage can be normalized with
-`memoryledger migrate storage-v2 --plan` and
-`memoryledger migrate storage-v2 --apply --backup`. Generated linked documents now
+`memoryledger migrate plan storage-v2` and
+`memoryledger migrate apply storage-v2`. Generated linked documents now
 default to `agent_docs/`; migrate generated files only with
-`memoryledger migrate linked-docs-dir --from docs/agents --to agent_docs --plan`
-then `--apply`.
+`memoryledger migrate plan linked-docs-dir`
+then `memoryledger migrate apply linked-docs-dir`.

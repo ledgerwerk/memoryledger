@@ -53,8 +53,8 @@ def test_manual_root_protected(runner, work) -> None:
     result = runner.invoke(
         __import__("memoryledger.cli", fromlist=["app"]).app, ["export"]
     )
-    assert result.exit_code == 1
-    assert "MANUAL_FILE" in result.output
+    assert result.exit_code == 4
+    assert "manual_file" in result.output
 
 
 def test_confined_path_rejects_absolute_parent_and_symlink(work) -> None:

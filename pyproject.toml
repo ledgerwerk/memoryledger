@@ -17,7 +17,7 @@ readme = "README.md"
 license = "Apache-2.0"
 dependencies = [
     "typer",
-    "ledgercore>=0.5.0,<0.6.0",
+    "ledgercore>=0.6.0,<0.7.0",
     "PyYAML",
     'tomli; python_version < "3.11"',
 ]
@@ -25,7 +25,7 @@ dynamic = ["version"]
 
 [project.scripts]
 memoryledger = "memoryledger.launcher:main"
-memledger = "memoryledger.launcher:main"
+memledger = "memoryledger.launcher:deprecated_memledger_main"
 
 [project.optional-dependencies]
 dev = [

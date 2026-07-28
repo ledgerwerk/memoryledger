@@ -7,10 +7,10 @@ from .conftest import invoke_ok
 
 def test_status_json(runner, work) -> None:
     invoke_ok(runner, ["init"])
-    result = invoke_ok(runner, ["status", "--json"])
+    result = invoke_ok(runner, ["--json", "status"])
     data = json.loads(result.output)
     assert data["ok"] is True
-    assert data["memories"] == 0
+    assert data["result"]["memories"] == 0
 
 
 def test_doctor(runner, work) -> None:

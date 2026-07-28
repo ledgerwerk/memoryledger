@@ -2,13 +2,23 @@ from __future__ import annotations
 
 import difflib
 import json
-import sys
 from pathlib import Path
+from typing import Any
 
 import typer
+from ledgercore.cli import (
+    CommonCLIState,
+)
 
 from . import __version__
 from .adopt import adopt, adoption_plan, verify_adoption
+from .cli_common import (
+    _read_input,
+    emit_error,
+    emit_success,
+    resolve_global_state,
+    translate_error,
+)
 from .errors import MemoryledgerError
 from .evidence_scan import apply as apply_scan
 from .evidence_scan import scan as scan_evidence
@@ -22,7 +32,6 @@ from .models import (
     RENDER_TARGETS,
     SCOPES,
     STATUSES,
-    Config,
     EvidenceRef,
 )
 from .project import (
@@ -54,16 +63,20 @@ review_app = typer.Typer(no_args_is_help=True)
 import_app = typer.Typer(no_args_is_help=True)
 agents_app = typer.Typer(no_args_is_help=True)
 templates_app = typer.Typer(no_args_is_help=True)
+template_app = typer.Typer(no_args_is_help=True)
 scan_app = typer.Typer(no_args_is_help=True)
 schema_app = typer.Typer(no_args_is_help=True)
 migrate_app = typer.Typer(no_args_is_help=True)
 storage_app = typer.Typer(no_args_is_help=True)
+config_app = typer.Typer(no_args_is_help=True)
+app.add_typer(config_app, name="config")
 app.add_typer(memory_app, name="memory")
 memory_app.add_typer(evidence_app, name="evidence")
 app.add_typer(review_app, name="review")
 app.add_typer(import_app, name="import")
 app.add_typer(agents_app, name="agents")
-app.add_typer(templates_app, name="templates")
+app.add_typer(templates_app, name="templates", hidden=True)  # deprecated alias
+app.add_typer(template_app, name="template")
 app.add_typer(scan_app, name="evidence")
 app.add_typer(schema_app, name="schema")
 app.add_typer(migrate_app, name="migrate")
@@ -71,32 +84,47 @@ app.add_typer(storage_app, name="storage")
 
 
 def _json(data: object) -> None:
+    """Legacy JSON helper - use emit_success in new code."""
     typer.echo(json.dumps(data, indent=2, sort_keys=True))
 
 
-def _load() -> tuple[Config, Store]:
-    config = workspace_as_compat_config(resolve_workspace())
+def _load() -> tuple[Any, Any]:
+    from .project import resolve_workspace, workspace_as_compat_config
+
+    workspace = resolve_workspace()
+    config = workspace_as_compat_config(workspace)
     return config, Store(config)
 
 
-def _read_input(text: str | None, file: Path | None, stdin: bool) -> str:
-    choices = sum([text is not None, file is not None, stdin])
-    if choices != 1:
-        raise MemoryledgerError(
-            "INPUT_REQUIRED", "Provide exactly one of --text, --file, or --stdin"
-        )
-    if text is not None:
-        return text
-    if file is not None:
-        return file.read_text()
-    return sys.stdin.read()
+_GLOBAL_STATE: CommonCLIState | None = None
 
 
-def _handle_error(exc: Exception) -> None:
-    if isinstance(exc, MemoryledgerError):
-        typer.echo(f"error: {exc.code}: {exc.message}", err=True)
-        raise typer.Exit(1) from exc
-    raise exc
+def get_state(ctx: typer.Context | None = None) -> CommonCLIState:
+    """Get CLI state from Typer context or fall back to legacy global state."""
+    if ctx is not None and ctx.obj and "state" in ctx.obj:
+        return ctx.obj["state"]
+    if _GLOBAL_STATE is not None:
+        return _GLOBAL_STATE
+    return CommonCLIState(tool="memoryledger", root=Path.cwd().resolve())
+
+
+# Backward-compatible alias
+_get_state = get_state
+
+
+def _load_from_root(root: Path | None = None) -> tuple[Any, Any]:
+    from .project import resolve_workspace, workspace_as_compat_config
+
+    workspace = resolve_workspace(root)
+    config = workspace_as_compat_config(workspace)
+    return config, Store(config)
+
+
+def _handle_error(exc: Exception, state: CommonCLIState | None = None) -> None:
+    if isinstance(exc, typer.Exit):
+        raise
+    cli_error = translate_error(exc)
+    emit_error(state or get_state(), "", cli_error)
 
 
 KIND_ALIASES = {"package-workflow": "procedure", "package_workflow": "procedure"}
@@ -134,44 +162,66 @@ def _schema_values() -> dict[str, list[str]]:
     }
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     version: bool = typer.Option(False, "--version", help="Show version and exit."),
+    root: Path | None = typer.Option(None, "--root", help="Project root directory."),
+    json_output: bool = typer.Option(
+        False, "--json", help="JSON output (ledgerwerk.cli.v1 envelope)."
+    ),
 ) -> None:
     if version:
-        typer.echo(__version__)
+        if json_output:
+            from ledgercore.cli import SuccessEnvelope
+
+            env = SuccessEnvelope(
+                tool="memoryledger", command="version", result={"version": __version__}
+            )
+            typer.echo(env.to_json())
+        else:
+            typer.echo(f"memoryledger {__version__}")
         raise typer.Exit()
+    state = resolve_global_state(root=root, json_output=json_output)
+    ctx.ensure_object(dict)
+    ctx.obj["state"] = state
 
 
 @app.command()
 def init(
+    ctx: typer.Context,
     project_name: str | None = None,
     memoryledger_dir: str = ".memoryledger",
     hidden_config: bool = False,
 ) -> None:
+    """Initialize a new Memoryledger project."""
+    state = get_state(ctx)
     try:
         config = init_workspace(project_name, memoryledger_dir, hidden_config)
-        typer.echo(f"initialized {config.config_path}")
+        emit_success(state, "init", result={"config_path": str(config.config_path)})
     except Exception as exc:
-        _handle_error(exc)
+        _handle_error(exc, state)
 
 
 @app.command()
 def status(
-    check: bool = False, json_output: bool = typer.Option(False, "--json")
+    ctx: typer.Context,
+    check: bool = False,
+    json_output: bool = typer.Option(False, "--json", hidden=True),
 ) -> None:
+    state = get_state(ctx)
+    if json_output:
+        state = CommonCLIState(
+            tool=state.tool, root=state.root, json_output=True, warnings=state.warnings
+        )
     try:
-        discovery = discover_storage()
+        discovery = discover_storage(state.root)
         if discovery.status == "uninitialized":
-            data = {"ok": False, "configured": False}
-            if json_output:
-                _json(data)
-            else:
-                typer.echo("No memoryledger config found.")
+            emit_success(state, "status", result={"ok": False, "configured": False})
             if check:
                 raise typer.Exit(1)
             return
-        config, store = _load()
+        config, store = _load_from_root(state.root)
         memories = store.all_memories()
         status_data: dict[str, object] = {
             "ok": True,
@@ -182,43 +232,50 @@ def status(
             "layout": discovery.status,
             "canonical": discovery.canonical_registered,
         }
-        if json_output:
-            _json(status_data)
-        else:
-            typer.echo(f"config: {config.config_path}")
-            typer.echo(f"storage: {config.storage_dir}")
-            typer.echo(f"memories: {len(memories)}")
+        human = "\n".join(f"{k}: {v}" for k, v in status_data.items())
+        emit_success(state, "status", result=status_data, human_output=human)
     except Exception as exc:
-        _handle_error(exc)
+        _handle_error(exc, state)
 
 
 @app.command()
-def doctor(json_output: bool = typer.Option(False, "--json")) -> None:
+def doctor(
+    ctx: typer.Context, json_output: bool = typer.Option(False, "--json", hidden=True)
+) -> None:
+    state = get_state(ctx)
+    if json_output:
+        state = CommonCLIState(
+            tool=state.tool, root=state.root, json_output=True, warnings=state.warnings
+        )
     try:
-        config, _store = _load()
-        discovery = discover_storage()
+        config, _store = _load_from_root(state.root)
+        discovery = discover_storage(state.root)
         issues: list[str] = []
         if not config.storage_dir.exists():
             issues.append("storage directory missing")
-        data = {"ok": not issues, "issues": issues, "layout": discovery.status}
-        if json_output:
-            _json(data)
-        else:
-            typer.echo("ok" if not issues else "issues: " + ", ".join(issues))
+        result = {"ok": not issues, "issues": issues, "layout": discovery.status}
+        human = "ok" if not issues else "issues: " + ", ".join(issues)
+        emit_success(state, "doctor", result=result, human_output=human)
     except Exception as exc:
-        _handle_error(exc)
+        _handle_error(exc, state)
 
 
 @app.command()
 def info(
-    json_output: bool = typer.Option(False, "--json"),
+    ctx: typer.Context,
     paths_only: bool = False,
     no_content: bool = False,
+    json_output: bool = typer.Option(False, "--json", hidden=True),
 ) -> None:
+    state = get_state(ctx)
+    if json_output:
+        state = CommonCLIState(
+            tool=state.tool, root=state.root, json_output=True, warnings=state.warnings
+        )
     try:
-        config, _store = _load()
-        discovery = discover_storage()
-        data = {
+        config, _store = _load_from_root(state.root)
+        discovery = discover_storage(state.root)
+        result = {
             "config": str(config.config_path),
             "root": str(config.root),
             "storage": str(config.storage_dir),
@@ -226,20 +283,18 @@ def info(
             "project_uuid": config.project_uuid,
             "project_name": config.project_name,
         }
-        if json_output:
-            _json(data)
-        else:
-            for value in data.values() if paths_only else data.items():
-                typer.echo(value if paths_only else f"{value[0]}: {value[1]}")
+        human = "\n".join(f"{k}: {v}" for k, v in result.items())
+        emit_success(state, "info", result=result, human_output=human)
     except Exception as exc:
-        _handle_error(exc)
+        _handle_error(exc, state)
 
 
 @storage_app.command("where")
-def storage_where(json_output: bool = typer.Option(False, "--json")) -> None:
+def storage_where(ctx: typer.Context) -> None:
+    state = get_state(ctx)
     try:
-        discovery = discover_storage()
-        data = {
+        discovery = discover_storage(state.root)
+        result = {
             "status": discovery.status,
             "project_root": str(discovery.project_root),
             "manifest": str(discovery.canonical_manifest)
@@ -257,34 +312,61 @@ def storage_where(json_output: bool = typer.Option(False, "--json")) -> None:
             if discovery.legacy_config
             else None,
         }
-        if json_output:
-            _json(data)
-        else:
-            for key, value in data.items():
-                typer.echo(f"{key}: {value}")
+        human = "\n".join(f"{k}: {v}" for k, v in result.items())
+        emit_success(state, "storage where", result=result, human_output=human)
     except Exception as exc:
-        _handle_error(exc)
+        _handle_error(exc, state)
 
 
 @storage_app.command("verify")
+@storage_app.command("validate", hidden=True)
 def storage_verify(
+    ctx: typer.Context,
     strict: bool = typer.Option(False, "--strict"),
-    json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Validate storage layout and bindings (read-only)."""
+    state = get_state(ctx)
     try:
-        discovery = discover_storage()
+        discovery = discover_storage(state.root)
         ok = discovery.status in {"canonical", "legacy", "uninitialized"}
-        if strict and discovery.status == "canonical":
-            resolve_workspace()
-        data = {"ok": ok, "status": discovery.status, "strict": strict}
-        if json_output:
-            _json(data)
-        else:
-            typer.echo("ok" if ok else f"invalid: {discovery.status}")
+        validation_details = {}
+        if discovery.status == "canonical" and strict:
+            try:
+                from ledgercore.config import locate_ledger_project
+                from ledgercore.layout import (
+                    parse_ledger_project_manifest,
+                    resolve_ledger_layout,
+                )
+                from ledgercore.storage_binding import validate_ledger_layout_storage
+
+                locator = locate_ledger_project(state.root)
+                if locator and locator.manifest_path.exists():
+                    manifest = parse_ledger_project_manifest(locator.manifest_path)
+                    layout = resolve_ledger_layout(locator, manifest, "memoryledger")
+                    report = validate_ledger_layout_storage(layout)
+                    validation_details = {
+                        "mounts_checked": len(report.results)
+                        if hasattr(report, "results")
+                        else 0,
+                        "valid": report.ok if hasattr(report, "ok") else True,
+                    }
+                    if hasattr(report, "ok") and not report.ok:
+                        ok = False
+            except Exception as e:
+                validation_details["error"] = str(e)
+                ok = False
+        result = {
+            "ok": ok,
+            "status": discovery.status,
+            "strict": strict,
+            **validation_details,
+        }
+        human = "ok" if ok else f"invalid: {discovery.status}"
+        emit_success(state, "storage validate", result=result, human_output=human)
         if not ok:
             raise typer.Exit(1)
     except Exception as exc:
-        _handle_error(exc)
+        _handle_error(exc, state)
 
 
 @storage_app.command("migrate")
@@ -819,9 +901,15 @@ def migrate_linked_docs_dir(
 
 @agents_app.command("plan")
 def agents_plan(json_output: bool = typer.Option(False, "--json")) -> None:
-    data = {"commands": ["memoryledger render", "memoryledger export"]}
+    data = {
+        "commands": [
+            "memoryledger preview --output -",
+            "memoryledger build",
+            "memoryledger export --output AGENTS.md",
+        ]
+    }
     _json(data) if json_output else typer.echo(
-        "memoryledger render\nmemoryledger export"
+        "memoryledger preview --output -\nmemoryledger build\nmemoryledger export --output AGENTS.md"
     )
 
 
@@ -1076,3 +1164,534 @@ def import_current_run(json_output: bool = typer.Option(False, "--json")) -> Non
     }
     _json(data) if json_output else typer.echo(data["message"])
     raise typer.Exit(2)
+
+
+# ── Canonical commands (Phase 4) ──────────────────────────────────────────
+
+
+# ── Canonical commands (Phase 4) ──────────────────────────────────────────
+
+
+# -- memory set-status (canonical; memory status is deprecated alias) --
+@memory_app.command("set-status")
+def memory_set_status(
+    memory_id: str,
+    status: str,
+    reason: str = typer.Option(..., "--reason"),
+) -> None:
+    """Change the lifecycle status of one memory."""
+    state = _get_state()
+    try:
+        _config, store = _load()
+        from .review import transition
+
+        memory = transition(store, memory_id, status, reason)
+        emit_success(
+            state,
+            "memory set-status",
+            result={
+                "memory_id": memory.id,
+                "status": memory.status,
+                "version": memory.version,
+            },
+            events=(
+                {
+                    "type": "memory.status_changed",
+                    "memory_id": memory.id,
+                    "status": status,
+                },
+            ),
+        )
+    except Exception as exc:
+        _handle_error(exc)
+
+
+# -- memory update (canonical; memory edit is deprecated alias) --
+@memory_app.command("update")
+def memory_update(
+    memory_id: str,
+    reason: str = typer.Option(..., "--reason"),
+    text: str | None = typer.Option(None, "--text"),
+    file: Path | None = typer.Option(None, "--file"),
+    stdin: bool = typer.Option(False, "--stdin"),
+    section: str | None = typer.Option(None, "--section"),
+) -> None:
+    """Replace the body of a memory record."""
+    state = _get_state()
+    try:
+        _config, store = _load()
+        memory = store.update_content(
+            memory_id, _read_input(text, file, stdin), reason, section=section
+        )
+        emit_success(
+            state,
+            "memory update",
+            result={"memory_id": memory.id, "version": memory.version},
+        )
+    except Exception as exc:
+        _handle_error(exc)
+
+
+# -- memory archive --
+@memory_app.command("archive")
+def memory_archive(
+    memory_id: str,
+    reason: str = typer.Option(..., "--reason"),
+) -> None:
+    """Archive a memory record."""
+    state = _get_state()
+    try:
+        _config, store = _load()
+        from .review import transition
+
+        memory = transition(store, memory_id, "archived", reason)
+        emit_success(
+            state,
+            "memory archive",
+            result={
+                "memory_id": memory.id,
+                "status": "archived",
+                "version": memory.version,
+            },
+            events=(
+                {
+                    "type": "memory.status_changed",
+                    "memory_id": memory.id,
+                    "to": "archived",
+                },
+            ),
+        )
+    except Exception as exc:
+        _handle_error(exc)
+
+
+# -- preview (render without side effects) --
+@app.command()
+def preview(
+    output: str = typer.Option("-", "--output", "-o"),
+) -> None:
+    """Render without modifying authoritative or derived state."""
+    state = _get_state()
+    try:
+        from .project import resolve_workspace, workspace_as_compat_config
+        from .render import render_all
+
+        workspace = resolve_workspace()
+        config = workspace_as_compat_config(workspace)
+        result = render_all(config)
+        if output == "-":
+            typer.echo(result.root_text, nl=False)
+        else:
+            out_path = Path(output)
+            out_path.write_text(result.root_text)
+            typer.echo(str(out_path))
+        # In JSON mode, return rendered structure info
+        if state.json_output:
+            emit_success(
+                state,
+                "preview",
+                result={
+                    "linked_docs": sorted(result.linked_docs),
+                    "nested_docs": sorted(result.nested_docs),
+                },
+            )
+    except Exception as exc:
+        _handle_error(exc)
+
+
+# -- build (materialize derived artifacts) --
+@app.command()
+def build(
+    output: Path | None = typer.Option(None, "--output", "-o"),
+) -> None:
+    """Materialize deterministic derived artifacts in the artifacts mount."""
+    state = _get_state()
+    try:
+        from .project import (
+            ensure_artifacts,
+            resolve_workspace,
+            workspace_as_compat_config,
+        )
+        from .render import render_all, write_rendered
+
+        workspace = resolve_workspace()
+        config = workspace_as_compat_config(workspace)
+        result = render_all(config)
+        ensure_artifacts(workspace)
+        written = write_rendered(config, result, output)
+        emit_success(
+            state,
+            "build",
+            result={
+                "root": str(written[0]) if written else "",
+                "linked_docs": sorted(result.linked_docs),
+                "nested_docs": sorted(result.nested_docs),
+            },
+        )
+    except Exception as exc:
+        _handle_error(exc)
+
+
+# -- commands --
+@app.command()
+def commands(ctx: typer.Context) -> None:
+    """List all registered commands with metadata."""
+    state = get_state(ctx)
+    from .command_catalog import CATALOG
+
+    emit_success(
+        state,
+        "commands",
+        result={"commands": CATALOG.to_dict()},
+        human_output=CATALOG.human_table(),
+    )
+
+
+# -- help --
+@app.command()
+def help(ctx: typer.Context, command: list[str] = typer.Argument(None)) -> None:
+    """Show help for a command path."""
+    state = get_state(ctx)
+    if not command:
+        # Show general help
+        import io
+
+        buf = io.StringIO()
+        app.info.help = "Memoryledger: auditable long-term project memory ledger."
+        # Just show the app help
+        typer.echo(app.info.help)
+        return
+    # Show help for specific command
+    cmd_path = " ".join(command)
+    from .command_catalog import CATALOG
+
+    resolved = CATALOG.resolve(cmd_path)
+    if resolved:
+        human = f"{resolved.path}: {resolved.summary}"
+        emit_success(
+            state,
+            "help",
+            result={"path": resolved.path, "summary": resolved.summary},
+            human_output=human,
+        )
+    else:
+        raise MemoryledgerError("NOT_FOUND", f"Command '{cmd_path}' not found.")
+
+
+# -- next-action --
+@app.command()
+def next_action(ctx: typer.Context) -> None:
+    """Return the recommended next workflow action."""
+    state = get_state(ctx)
+    try:
+        from .project import discover_storage
+
+        discovery = discover_storage(state.root)
+        if discovery.status == "uninitialized":
+            result = NextActionResult(
+                command="memoryledger init", reason="Project is not initialized."
+            )
+            emit_success(
+                state,
+                "next-action",
+                result=result.to_dict(),
+                human_output=f"{result.command}\n{result.reason}",
+            )
+            return
+        _config, store = _load_from_root(state.root)
+        candidates = [m for m in store.all_memories() if m.status == "candidate"]
+        if candidates:
+            result = NextActionResult(
+                command="memoryledger review list",
+                reason=f"{len(candidates)} candidate memories require review.",
+                context={"candidate_count": len(candidates)},
+            )
+            emit_success(
+                state,
+                "next-action",
+                result=result.to_dict(),
+                human_output=f"{result.command}\n{result.reason}",
+            )
+            return
+        result = NextActionResult(
+            command="no action",
+            reason="Project is healthy with no pending actions.",
+        )
+        emit_success(
+            state,
+            "next-action",
+            result=result.to_dict(),
+            human_output=f"{result.command}\n{result.reason}",
+        )
+    except Exception as exc:
+        _handle_error(exc, state)
+
+
+# -- schema list --
+@schema_app.command("list")
+def schema_list() -> None:
+    """List available schema names."""
+    state = _get_state()
+    names = ["memory", "evidence", "tool-config", "migration-bundle"]
+    if state.json_output:
+        from ledgercore.cli import SuccessEnvelope
+
+        typer.echo(
+            SuccessEnvelope(
+                tool="memoryledger", command="schema list", result={"schemas": names}
+            ).to_json()
+        )
+    else:
+        typer.echo("\n".join(names))
+
+
+# -- schema show --
+@schema_app.command("show")
+def schema_show(
+    name: str = typer.Argument(...),
+) -> None:
+    """Show field definitions for a schema."""
+    state = _get_state()
+    data = _schema_values()
+    if name in data:
+        if state.json_output:
+            from ledgercore.cli import SuccessEnvelope
+
+            typer.echo(
+                SuccessEnvelope(
+                    tool="memoryledger",
+                    command="schema show",
+                    result={"name": name, "values": data[name]},
+                ).to_json()
+            )
+        else:
+            typer.echo(f"{name}: {', '.join(data[name])}")
+    else:
+        raise MemoryledgerError(
+            "NOT_FOUND",
+            f"Schema '{name}' not found. Available: {', '.join(data.keys())}",
+        )
+
+
+# -- config show --
+@config_app.command("show")
+def config_show(ctx: typer.Context) -> None:
+    """Show effective configuration with source tracking."""
+    state = get_state(ctx)
+    try:
+        from .project import (
+            discover_storage,
+            resolve_workspace,
+            workspace_as_compat_config,
+        )
+
+        discovery = discover_storage(state.root)
+        if discovery.status == "uninitialized":
+            raise MemoryledgerError("NO_CONFIG", "Run `memoryledger init` first.")
+        workspace = resolve_workspace(state.root)
+        config = workspace_as_compat_config(workspace)
+        result = {
+            "project_root": str(config.root),
+            "config_path": str(config.config_path),
+            "storage_dir": str(config.storage_dir),
+            "artifacts_dir": str(config.artifacts_dir)
+            if config.artifacts_dir
+            else None,
+            "project_name": config.project_name,
+            "project_uuid": config.project_uuid,
+            "ledger_code": config.ledger_code,
+            "render": {
+                "root_section": config.render.root_section,
+            },
+        }
+        human = "\n".join(f"{k}: {v}" for k, v in result.items())
+        emit_success(state, "config show", result=result, human_output=human)
+    except Exception as exc:
+        _handle_error(exc)
+
+
+# -- config validate --
+@config_app.command("validate")
+def config_validate(ctx: typer.Context) -> None:
+    """Validate configuration without writing."""
+    state = get_state(ctx)
+    try:
+        from .project import discover_storage, resolve_workspace
+
+        discovery = discover_storage(state.root)
+        if discovery.status == "uninitialized":
+            raise MemoryledgerError("NO_CONFIG", "Run `memoryledger init` first.")
+        resolve_workspace(state.root)
+        emit_success(
+            state,
+            "config validate",
+            result={"valid": True, "status": "ok"},
+            human_output="ok",
+        )
+    except Exception as exc:
+        _handle_error(exc)
+
+
+# -- storage set --
+@storage_app.command("set")
+def storage_set(
+    ctx: typer.Context,
+    mount: str = typer.Argument(...),
+    storage: str = typer.Option(..., "--storage"),
+    storage_root: Path | None = typer.Option(None, "--storage-root"),
+    scope: str = typer.Option("project", "--scope"),
+) -> None:
+    """Set a mount's storage kind and scope."""
+    state = get_state(ctx)
+    try:
+        if mount not in ("data", "artifacts"):
+            raise MemoryledgerError(
+                "INVALID_ARGUMENT", f"Unknown mount: {mount}. Valid: data, artifacts"
+            )
+        if storage not in ("project", "external", "user-data", "cache"):
+            raise MemoryledgerError(
+                "INVALID_ARGUMENT", f"Unknown storage kind: {storage}"
+            )
+        if mount == "data" and storage == "cache":
+            raise MemoryledgerError(
+                "INVALID_ARGUMENT", "data mount cannot use cache storage"
+            )
+        raise MemoryledgerError(
+            "FEATURE_UNAVAILABLE",
+            "storage set is not yet implemented. Use `migrate plan storage-layout` for topology changes.",
+        )
+    except Exception as exc:
+        _handle_error(exc, state)
+
+
+# -- storage clear-override --
+@storage_app.command("clear-override")
+def storage_clear_override(
+    ctx: typer.Context,
+    mount: str = typer.Argument(...),
+) -> None:
+    """Remove a local mount override."""
+    state = get_state(ctx)
+    try:
+        if mount not in ("data", "artifacts"):
+            raise MemoryledgerError("INVALID_ARGUMENT", f"Unknown mount: {mount}")
+        raise MemoryledgerError(
+            "FEATURE_UNAVAILABLE",
+            "storage clear-override is not yet implemented.",
+        )
+    except Exception as exc:
+        _handle_error(exc, state)
+
+
+# -- migrate status, plan, apply, recover, cleanup --
+@migrate_app.command("status")
+def migrate_status(ctx: typer.Context) -> None:
+    """Show migration status for all registered migrations."""
+    state = get_state(ctx)
+    try:
+        from .migrations.registry import REGISTRY
+
+        migrations = REGISTRY.status(state.root)
+        result = {"migrations": migrations}
+        human = "\n".join(
+            f"{m['name']}: {'applied' if m.get('applied') else 'pending'}"
+            for m in migrations
+        )
+        emit_success(state, "migrate status", result=result, human_output=human)
+    except Exception as exc:
+        _handle_error(exc, state)
+
+
+@migrate_app.command("plan")
+def migrate_plan(
+    ctx: typer.Context,
+    migration: str | None = typer.Argument(None),
+    output: Path | None = typer.Option(None, "--output", "-o"),
+) -> None:
+    """Generate a read-only migration plan."""
+    state = get_state(ctx)
+    try:
+        if migration is None:
+            raise MemoryledgerError(
+                "MISSING_MIGRATION",
+                "Provide a migration name: storage-layout, storage-v2, linked-docs-dir",
+            )
+        from .migrations.registry import REGISTRY
+
+        handler = REGISTRY.get(migration)
+        result = handler.plan(state.root, output=output)
+        emit_success(state, "migrate plan", result=result)
+    except Exception as exc:
+        _handle_error(exc, state)
+
+
+@migrate_app.command("apply")
+def migrate_apply(
+    ctx: typer.Context,
+    migration: str | None = typer.Argument(None),
+    plan_file: Path | None = typer.Option(None, "--plan-file"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Apply a migration plan."""
+    state = get_state(ctx)
+    try:
+        if migration is None:
+            raise MemoryledgerError("MISSING_MIGRATION", "Provide a migration name")
+        from .migrations.registry import REGISTRY
+
+        handler = REGISTRY.get(migration)
+        result = handler.apply(state.root, plan_file=plan_file, dry_run=dry_run)
+        emit_success(state, "migrate apply", result=result)
+    except Exception as exc:
+        _handle_error(exc, state)
+
+
+@migrate_app.command("recover")
+def migrate_recover(
+    ctx: typer.Context,
+    journal: Path = typer.Option(..., "--journal"),
+    policy: str = typer.Option("auto", "--policy"),
+    migration: str | None = typer.Argument(None),
+) -> None:
+    """Recover from a migration journal."""
+    state = get_state(ctx)
+    try:
+        if migration is None:
+            # Default to storage-layout for backward compat
+            migration = "storage-layout"
+        from .migrations.registry import REGISTRY
+
+        handler = REGISTRY.get(migration)
+        result = handler.recover(state.root, journal=journal, policy=policy)
+        emit_success(state, "migrate recover", result=result)
+    except Exception as exc:
+        _handle_error(exc, state)
+
+
+@migrate_app.command("cleanup")
+def migrate_cleanup(
+    ctx: typer.Context,
+    migration: str | None = typer.Argument(None),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    yes: bool = typer.Option(False, "--yes"),
+) -> None:
+    """Clean up legacy paths after successful migration."""
+    state = get_state(ctx)
+    try:
+        if migration is None:
+            raise MemoryledgerError("MISSING_MIGRATION", "Provide a migration name")
+        from .migrations.registry import REGISTRY
+
+        handler = REGISTRY.get(migration)
+        result = handler.cleanup(state.root, dry_run=dry_run, confirm=yes)
+        emit_success(state, "migrate cleanup", result=result)
+    except Exception as exc:
+        _handle_error(exc, state)
+
+
+# ── Canonical template commands (registered on template_app) ──────────────
+template_app.command("list")(templates_list)
+template_app.command("show")(templates_show)
+template_app.command("apply")(templates_apply)
+template_app.command("sync")(templates_sync)
+template_app.command("remove")(templates_remove)

@@ -53,8 +53,8 @@ def test_apply_accept_requires_reason_and_accepts_memory(
         __import__("memoryledger.cli", fromlist=["app"]).app,
         ["templates", "apply", "base", "--accept"],
     )
-    assert missing_reason.exit_code == 1
-    assert "MISSING_REASON" in missing_reason.output
+    assert missing_reason.exit_code == 2
+    assert "missing_reason" in missing_reason.output
     applied = json.loads(
         invoke_ok(
             runner,

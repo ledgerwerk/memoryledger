@@ -34,9 +34,9 @@ Use memory records as the source of truth, then render and export.
 ## Required workflow
 
 1. Treat user-provided memory as a candidate unless the user explicitly approves it.
-2. Create or update memory with `memoryledger memory create`, `memoryledger memory edit`, or `memoryledger memory append`.
+2. Create or update memory with `memoryledger memory create`, `memoryledger memory update`, or `memoryledger memory append`.
 3. Use `memoryledger review accept` only when the user clearly approved the memory or an explicit template policy allows acceptance.
-4. For the common approved workflow, run `memoryledger finalize --accept-all --reason "..." --export`. Otherwise run `memoryledger render` then `memoryledger export`.
+4. For the common approved workflow, run `memoryledger finalize --accept-all --reason "..." --export`. Otherwise run `memoryledger build` then `memoryledger export`.
 5. Use `--include-nested` only when nested export is enabled or explicitly requested.
 6. Show the resulting `AGENTS.md` path and any linked document paths.
 7. Keep root `AGENTS.md` concise and move long memory to linked documents.
@@ -86,13 +86,13 @@ Examples:
 
 ## Migrating an existing AGENTS.md
 
-If export reports `MANUAL_FILE`, preserve the file. Do not overwrite it.
+If export reports `manual_file`, preserve the file. Do not overwrite it.
 
 1. Run `memoryledger agents adopt AGENTS.md --json` for a read-only migration plan.
 2. Inspect the source hash, headings, proposed memories, target placement, and whether the root is expected to shrink.
 3. If the user approves, run `memoryledger agents adopt AGENTS.md --apply --backup --accept --reason "..."`.
 4. Run `memoryledger agents verify-adoption --source AGENTS.md.memoryledger-adopt-1.bak`.
-5. Run `memoryledger finalize --accept-all --reason "..." --export`, or run `memoryledger render` and `memoryledger export` separately.
+5. Run `memoryledger finalize --accept-all --reason "..." --export`, or run `memoryledger build` and `memoryledger export` separately.
 6. Report whether the generated root became shorter and where the full migrated content lives.
 
 Adoption preserves the full original source as a generated linked document. The
@@ -108,18 +108,18 @@ Canonical durable Memoryledger state is owned by Ledgercore schema 3:
 - durable data: `.ledger/memoryledger/data/`
 - rendered previews: the resolved `artifacts` cache mount
 
-Use `memoryledger storage where` and `memoryledger storage verify --strict` for
+Use `memoryledger storage where` and `memoryledger storage validate --strict` for
 read-only diagnostics. Do not manually copy `.memoryledger` into `.ledger`.
 Migrate an existing legacy project explicitly with
-`memoryledger storage migrate --dry-run`, then
-`memoryledger storage migrate`; use `storage recover` for an interrupted
-migration and `storage cleanup-legacy --dry-run` before any removal. Migration
+`memoryledger migrate plan storage-layout`, then
+`memoryledger migrate apply storage-layout`; use `migrate recover` for an interrupted
+migration and `migrate cleanup storage-layout --dry-run` before any removal. Migration
 is copy-first, hash-verified, manifest-last, and retains the legacy source until
 verified cleanup.
 
 Storage v2 uses one front-matter Markdown file per memory under `.memoryledger/memories/`.
-Use `memoryledger migrate storage-v2 --plan` before `--apply --backup` when converting legacy sidecar records.
-Generated linked documents default to `agent_docs/`. Use `memoryledger migrate linked-docs-dir --from docs/agents --to agent_docs --plan` before `--apply`; it moves only files containing the generated marker.
+Use `memoryledger migrate plan storage-v2` before `migrate apply storage-v2 --backup` when converting legacy sidecar records.
+Generated linked documents default to `agent_docs/`. Use `memoryledger migrate plan linked-docs-dir` before `migrate apply`; it moves only files containing the generated marker.
 
 ## Implementation workflow memory
 

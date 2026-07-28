@@ -62,5 +62,5 @@ def test_manual_nested_protected(runner, work: Path) -> None:
         __import__("memoryledger.cli", fromlist=["app"]).app,
         ["export", "--include-nested"],
     )
-    assert result.exit_code == 1
-    assert "MANUAL_FILE" in result.output
+    assert result.exit_code == 4
+    assert "manual_file" in result.output

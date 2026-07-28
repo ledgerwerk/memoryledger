@@ -36,4 +36,4 @@ def test_template_content_file_cannot_escape(runner, work, monkeypatch) -> None:
         ["templates", "show", "bad"],
     )
     assert result.exit_code == 1
-    assert "INVALID_TEMPLATE_PATH" in result.output
+    assert "invalid_template_path" in result.output
