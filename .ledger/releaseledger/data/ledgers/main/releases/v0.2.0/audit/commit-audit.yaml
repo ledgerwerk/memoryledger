@@ -1,0 +1,159 @@
+schema_version: 1
+object_type: commit_audit_sheet
+versioning:
+  schema_version: 1
+  revision: 5
+release_version: v0.2.0
+git_base_ref: v0.1.1
+git_base_sha: 17d146be404c3860718511e4cc23d7e9b56de4e0
+git_head_ref: HEAD
+git_head_sha: 80377fa2340ff08137ee027de9a5c029b5071f07
+git_range: 17d146be404c3860718511e4cc23d7e9b56de4e0..80377fa2340ff08137ee027de9a5c029b5071f07
+commit_count: 4
+rows:
+- sha: 18e44f1d2c1e275ba6e567dc215b2009eca64c61
+  source_ref: git:18e44f1d2c1e275ba6e567dc215b2009eca64c61
+  short_sha: 18e44f1
+  changed_paths:
+  - pyproject.toml
+  stats:
+    files_changed: 0
+    insertions: 1
+    deletions: 1
+  inspected: true
+  inspected_paths:
+  - pyproject.toml
+  observed_behavior: Dependency version bump for ledgercore
+  public_impact: internal
+  decision: internal
+  evidence_subject: 'chore: update dep'
+  target_entry_id: entry-0009
+- sha: 6b590290f6f0d8876772e1c723a4235beb3f2633
+  source_ref: git:6b590290f6f0d8876772e1c723a4235beb3f2633
+  short_sha: 6b59029
+  changed_paths:
+  - README.md
+  - memoryledger/cli.py
+  - memoryledger/config.py
+  - memoryledger/evidence_scan.py
+  - memoryledger/legacy.py
+  - memoryledger/migration.py
+  - memoryledger/models.py
+  - memoryledger/project.py
+  - memoryledger/render.py
+  - memoryledger/run_import.py
+  - memoryledger/storage.py
+  - pyproject.toml
+  - skills/memoryledger/SKILL.md
+  - tests/test_agents_adopt.py
+  - tests/test_config_discovery.py
+  - tests/test_evidence.py
+  - tests/test_import_run.py
+  - tests/test_init.py
+  - tests/test_ledgercore_schema3.py
+  - tests/test_render_agents.py
+  - tests/test_storage_v2_and_workflow.py
+  stats:
+    files_changed: 0
+    insertions: 1599
+    deletions: 92
+  inspected: true
+  inspected_paths:
+  - memoryledger/config.py
+  - memoryledger/legacy.py
+  - memoryledger/migration.py
+  - memoryledger/project.py
+  - memoryledger/models.py
+  - memoryledger/cli.py
+  observed_behavior: Added configuration discovery, legacy compatibility, migration
+    framework, project locator, and models modules
+  public_impact: public
+  decision: accepted
+  evidence_subject: 'feat: migrate to ledgercore 0.5'
+  target_entry_id: entry-0002
+- sha: b59d9524f48e52f4c42df104e652fbcc69a6e775
+  source_ref: git:b59d9524f48e52f4c42df104e652fbcc69a6e775
+  short_sha: b59d952
+  changed_paths:
+  - .ledger/ledger.toml
+  - .ledger/migrations/2259f45c-253f-403a-bbb0-143d7d2f190c.toml
+  - .ledger/releaseledger/.ledger-project.toml
+  - .ledger/releaseledger/.releaseledger-migration.jsonl
+  - .ledger/releaseledger/config.toml
+  - .ledger/releaseledger/data/.ledger-project.toml
+  - .ledger/releaseledger/data/ledgers/main/events/events.jsonl
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/entries/entry-0001.md
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/entries/entry-0002.md
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/entries/entry-0003.md
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/entries/entry-0004.md
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/entries/entry-0005.md
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/entries/entry-0006.md
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/entries/entry-0007.md
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/entries/entry-0008.md
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/entries/entry-0009.md
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/entries/entry-0010.md
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/entries/entry-0011.md
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/entries/entry-0012.md
+  - .ledger/releaseledger/data/ledgers/main/releases/v0.1.1/release.md
+  - .ledger/releaseledger/write.lock
+  - .releaseledger/ledgers/main/indexes/entries.json
+  - .releaseledger/ledgers/main/indexes/releases.json
+  stats:
+    files_changed: 0
+    insertions: 74
+    deletions: 217
+  inspected: true
+  inspected_paths:
+  - .ledger/releaseledger/config.toml
+  - .ledger/ledger.toml
+  observed_behavior: Migrated releaseledger storage from .releaseledger/ to .ledger/releaseledger/
+    structure
+  public_impact: internal
+  decision: accepted
+  evidence_subject: 'chore: migrate releaseledger'
+  target_entry_id: entry-0007
+- sha: 80377fa2340ff08137ee027de9a5c029b5071f07
+  source_ref: git:80377fa2340ff08137ee027de9a5c029b5071f07
+  short_sha: 80377fa
+  changed_paths:
+  - .ledger/ledger.toml
+  - .ledger/taskledger/.ledger-project.toml
+  - .ledger/taskledger/config.toml
+  - README.md
+  - memoryledger/cli.py
+  - memoryledger/cli_common.py
+  - memoryledger/command_catalog.py
+  - memoryledger/command_results.py
+  - memoryledger/launcher.py
+  - memoryledger/ledgercore_compat.py
+  - memoryledger/migrations/__init__.py
+  - memoryledger/migrations/linked_docs_dir.py
+  - memoryledger/migrations/plan_io.py
+  - memoryledger/migrations/registry.py
+  - memoryledger/migrations/storage_layout.py
+  - memoryledger/migrations/storage_v2.py
+  - pyproject.toml
+  - skills/memoryledger/SKILL.md
+  - tests/test_agents_adopt.py
+  - tests/test_guardrails.py
+  - tests/test_json_contract.py
+  - tests/test_nested_agents.py
+  - tests/test_status.py
+  - tests/test_templates.py
+  - tests/test_templates_apply.py
+  stats:
+    files_changed: 0
+    insertions: 2503
+    deletions: 113
+  inspected: true
+  inspected_paths:
+  - memoryledger/command_catalog.py
+  - memoryledger/command_results.py
+  - memoryledger/cli_common.py
+  - memoryledger/migrations/storage_v2.py
+  observed_behavior: Added command catalog, command results, CLI common modules, and
+    migration framework with storage v2 support
+  public_impact: public
+  decision: accepted
+  evidence_subject: 'feat: migrate to ledgercore 0.6.0'
+  target_entry_id: entry-0001

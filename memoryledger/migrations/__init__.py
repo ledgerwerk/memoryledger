@@ -78,10 +78,7 @@ class MigrationRegistry:
 
     def list(self) -> list[Mapping[str, object]]:
         """List all registered migrations."""
-        return [
-            {"name": h.name, "summary": h.summary}
-            for h in self._handlers.values()
-        ]
+        return [{"name": h.name, "summary": h.summary} for h in self._handlers.values()]
 
     def status(self, root: Path) -> list[Mapping[str, object]]:
         """Get status for all migrations."""
@@ -91,11 +88,13 @@ class MigrationRegistry:
                 status = handler.status(root)
                 results.append(status)
             except Exception as e:
-                results.append({
-                    "name": handler.name,
-                    "available": False,
-                    "error": str(e),
-                })
+                results.append(
+                    {
+                        "name": handler.name,
+                        "available": False,
+                        "error": str(e),
+                    }
+                )
         return results
 
 

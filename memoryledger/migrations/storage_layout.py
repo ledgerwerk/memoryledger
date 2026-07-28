@@ -8,7 +8,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-
 STORAGE_LAYOUT = "storage-layout"
 
 
@@ -25,7 +24,9 @@ class StorageLayoutMigration:
         legacy_data = root / ".memoryledger"
         canonical_manifest = root / ".ledger" / "ledger.toml"
 
-        has_legacy = legacy_config.exists() or legacy_dot_config.exists() or legacy_data.exists()
+        has_legacy = (
+            legacy_config.exists() or legacy_dot_config.exists() or legacy_data.exists()
+        )
         has_canonical = canonical_manifest.exists()
 
         if has_canonical and not has_legacy:
@@ -65,6 +66,7 @@ class StorageLayoutMigration:
         """Apply storage-layout migration."""
         # For now, return feature_unavailable until WP5
         from ..errors import MemoryledgerError
+
         raise MemoryledgerError(
             "FEATURE_UNAVAILABLE",
             "storage-layout apply is not yet fully implemented with schema-3 support.",

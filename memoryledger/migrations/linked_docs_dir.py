@@ -8,7 +8,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-
 LINKED_DOCS_DIR = "linked-docs-dir"
 
 
@@ -29,6 +28,7 @@ class LinkedDocsDirMigration:
     def plan(self, root: Path, *, output: Path | None = None) -> Mapping[str, object]:
         """Generate a read-only linked docs dir plan."""
         from ..errors import MemoryledgerError
+
         raise MemoryledgerError(
             "FEATURE_UNAVAILABLE",
             "linked-docs-dir plan is not yet implemented.",
@@ -43,6 +43,7 @@ class LinkedDocsDirMigration:
     ) -> Mapping[str, object]:
         """Apply linked docs dir migration."""
         from ..errors import MemoryledgerError
+
         raise MemoryledgerError(
             "FEATURE_UNAVAILABLE",
             "linked-docs-dir apply is not yet implemented.",
@@ -57,6 +58,7 @@ class LinkedDocsDirMigration:
     ) -> Mapping[str, object]:
         """Recover from a linked docs dir migration."""
         from ..errors import MemoryledgerError
+
         raise MemoryledgerError(
             "FEATURE_UNAVAILABLE",
             "linked-docs-dir recovery is not yet implemented.",

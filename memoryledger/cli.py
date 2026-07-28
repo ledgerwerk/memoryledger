@@ -19,6 +19,7 @@ from .cli_common import (
     resolve_global_state,
     translate_error,
 )
+from .command_results import NextActionResult
 from .errors import MemoryledgerError
 from .evidence_scan import apply as apply_scan
 from .evidence_scan import scan as scan_evidence
@@ -1354,9 +1355,7 @@ def help(ctx: typer.Context, command: list[str] = typer.Argument(None)) -> None:
     state = get_state(ctx)
     if not command:
         # Show general help
-        import io
 
-        buf = io.StringIO()
         app.info.help = "Memoryledger: auditable long-term project memory ledger."
         # Just show the app help
         typer.echo(app.info.help)

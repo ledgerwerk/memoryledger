@@ -10,7 +10,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-
 PLAN_SCHEMA_V2 = "memoryledger.migration-plan.v2"
 
 
@@ -69,7 +68,9 @@ def serialize_plan(
     return json.dumps(plan, indent=2, sort_keys=True)
 
 
-def deserialize_plan(text: str, *, expected_migration: str | None = None) -> dict[str, Any]:
+def deserialize_plan(
+    text: str, *, expected_migration: str | None = None
+) -> dict[str, Any]:
     """Deserialize and validate a migration plan.
 
     Args:
@@ -99,7 +100,15 @@ def deserialize_plan(text: str, *, expected_migration: str | None = None) -> dic
         )
 
     # Validate required fields
-    required = ["migration", "migration_id", "project_uuid", "project_root", "source", "target", "domain"]
+    required = [
+        "migration",
+        "migration_id",
+        "project_uuid",
+        "project_root",
+        "source",
+        "target",
+        "domain",
+    ]
     missing = [f for f in required if f not in plan]
     if missing:
         raise PlanSerializationError(
@@ -115,8 +124,18 @@ def deserialize_plan(text: str, *, expected_migration: str | None = None) -> dic
         )
 
     # Validate no unknown fields
-    known = {"schema", "migration", "migration_id", "project_uuid", "project_root",
-             "source", "target", "domain", "ledgercore_plan", "warnings"}
+    known = {
+        "schema",
+        "migration",
+        "migration_id",
+        "project_uuid",
+        "project_root",
+        "source",
+        "target",
+        "domain",
+        "ledgercore_plan",
+        "warnings",
+    }
     unknown = set(plan.keys()) - known
     if unknown:
         raise PlanSerializationError(
@@ -142,7 +161,9 @@ def write_plan_file(plan_text: str, output: Path) -> Path:
     return output
 
 
-def read_plan_file(path: Path, *, expected_migration: str | None = None) -> dict[str, Any]:
+def read_plan_file(
+    path: Path, *, expected_migration: str | None = None
+) -> dict[str, Any]:
     """Read and validate a plan file.
 
     Args:

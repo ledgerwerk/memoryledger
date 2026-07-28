@@ -8,7 +8,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-
 STORAGE_V2 = "storage-v2"
 
 
@@ -41,8 +40,8 @@ class StorageV2Migration:
 
     def plan(self, root: Path, *, output: Path | None = None) -> Mapping[str, object]:
         """Generate a read-only storage-v2 plan."""
-        from ..storage import Store
         from ..project import resolve_workspace, workspace_as_compat_config
+        from ..storage import Store
 
         workspace = resolve_workspace(root)
         config = workspace_as_compat_config(workspace)
@@ -57,8 +56,8 @@ class StorageV2Migration:
         dry_run: bool = False,
     ) -> Mapping[str, object]:
         """Apply storage-v2 migration."""
-        from ..storage import Store
         from ..project import resolve_workspace, workspace_as_compat_config
+        from ..storage import Store
 
         workspace = resolve_workspace(root)
         config = workspace_as_compat_config(workspace)
@@ -74,6 +73,7 @@ class StorageV2Migration:
     ) -> Mapping[str, object]:
         """Recover from a storage-v2 migration."""
         from ..errors import MemoryledgerError
+
         raise MemoryledgerError(
             "FEATURE_UNAVAILABLE",
             "storage-v2 recovery is not yet implemented.",

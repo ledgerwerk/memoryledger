@@ -8,7 +8,6 @@ resolver may not enforce the declared range.
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any
 
 from ledgercore.cli import (
     CLIError,
@@ -49,7 +48,9 @@ def _parse_version_tuple(ver_str: str) -> tuple[int, ...]:
 class LedgercoreVersionUnsupported(Exception):
     """Raised when the installed Ledgercore version is outside the supported range."""
 
-    def __init__(self, installed: str, minimum: tuple[int, ...], maximum: tuple[int, ...]) -> None:
+    def __init__(
+        self, installed: str, minimum: tuple[int, ...], maximum: tuple[int, ...]
+    ) -> None:
         self.installed = installed
         self.minimum = minimum
         self.maximum = maximum
@@ -73,10 +74,14 @@ def require_supported_ledgercore() -> None:
     try:
         installed_str = version("ledgercore")
     except PackageNotFoundError:
-        raise LedgercoreVersionUnsupported("not installed", MIN_LEDGERCORE, MAX_LEDGERCORE)
+        raise LedgercoreVersionUnsupported(
+            "not installed", MIN_LEDGERCORE, MAX_LEDGERCORE
+        ) from None
     installed = _parse_version_tuple(installed_str)
     if installed < MIN_LEDGERCORE or installed >= MAX_LEDGERCORE:
-        raise LedgercoreVersionUnsupported(installed_str, MIN_LEDGERCORE, MAX_LEDGERCORE)
+        raise LedgercoreVersionUnsupported(
+            installed_str, MIN_LEDGERCORE, MAX_LEDGERCORE
+        )
 
 
 __all__ = [
