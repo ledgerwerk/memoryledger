@@ -1,45 +1,33 @@
-# MemoryLedger Documentation
+# Memoryledger documentation
 
-This directory contains the Sphinx documentation for MemoryLedger.
-
-## Building the Documentation
-
-### Prerequisites
-
-Install the documentation dependencies:
+The site is authored in MyST Markdown and built with Sphinx. Install the
+package and documentation dependencies from the repository root:
 
 ```bash
-uv pip install -e ".[dev]"
+python -m pip install -e .
+python -m pip install -r docs/requirements.txt
 ```
 
-### Building HTML Documentation
+For an editable development environment, `python -m pip install -e ".[dev]"`
+installs the same documentation dependencies through the project optional
+dependency group.
 
-To build the HTML documentation:
+Build HTML with warnings treated as errors:
+
+```bash
+python -m sphinx -W --keep-going -b html docs docs/_build/html
+```
+
+The standard wrapper is equivalent:
 
 ```bash
 cd docs
 make html
 ```
 
-The built documentation will be available in `docs/_build/html/`.
+`docs/_build/` is generated output. The CLI reference is generated from the
+command catalog and Typer tree; edit its generator and metadata instead of the
+generated page.
 
-### Building PDF Documentation
-
-To build PDF documentation (requires LaTeX):
-
-```bash
-cd docs
-make latexpdf
-```
-
-## Documentation Structure
-
-- `conf.py` - Sphinx configuration file
-- `index.rst` - Main documentation index
-- `changelog.md` - Project changelog (included from project root)
-- `api/` - API documentation
-- `_build/` - Built documentation output (not version controlled)
-
-## Read the Docs
-
-This project is configured to build documentation on Read the Docs. The configuration is in `.readthedocs.yaml` at the project root.
+The repository includes `.readthedocs.yaml` for the supported Read the Docs
+build, using the same `docs/requirements.txt` and `docs/conf.py` configuration.

@@ -1,67 +1,64 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
+from __future__ import annotations
 
-# -- Path setup --------------------------------------------------------------
-
-import os
 import sys
+from pathlib import Path
 
-# Add the project root to the path so that autodoc can find the modules
-sys.path.insert(0, os.path.abspath('..'))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
-# -- Project information -----------------------------------------------------
+project = "memoryledger"
+author = "Memoryledger contributors"
 
-project = 'memoryledger'
-copyright = '2024, MemoryLedger Contributors'
-author = 'MemoryLedger Contributors'
-
-# The version info for the project you're documenting
 try:
-    from memoryledger._version import version
-    release = version
-except ImportError:
-    release = '0.1.0'
+    from memoryledger import __version__
+except Exception:
+    __version__ = "0.0.0"
 
-# -- General configuration ---------------------------------------------------
+version = __version__
+release = __version__
 
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.napoleon',
-    'sphinx_autodoc_typehints',
-    'myst_parser',
+    "myst_parser",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosectionlabel",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
+    "sphinx_autodoc_typehints",
 ]
 
-templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'README.md']
+source_suffix = {".md": "markdown"}
+master_doc = "index"
+exclude_patterns = ["_build", "README.md", "Thumbs.db", ".DS_Store"]
 
-# The master toctree document.
-master_doc = 'index'
+html_theme = "sphinx_rtd_theme"
+html_static_path: list[str] = []
+templates_path: list[str] = []
 
-# -- Options for HTML output -------------------------------------------------
-
-html_theme = 'sphinx_rtd_theme'
-html_static_path = ['_static']
-
-# -- Options for MyST Parser ------------------------------------------------
-
-source_suffix = {
-    '.rst': 'restructuredtext',
-    '.md': 'markdown',
-}
-
-# MyST extensions
 myst_enable_extensions = [
-    'colon_fence',
-    'deflist',
-    'dollarmath',
-    'fieldlist',
-    'html_admonition',
-    'html_image',
-    'replacements',
-    'smartquotes',
-    'substitution',
-    'tasklist',
+    "colon_fence",
+    "deflist",
+    "fieldlist",
+    "substitution",
+    "tasklist",
 ]
+myst_heading_anchors = 3
+autosectionlabel_prefix_document = True
+# The site uses explicit MyST autodoc directives; leaving autosummary disabled
+# avoids implicit generated RST pages in the Markdown-only source tree.
+autosummary_generate = False
+
+autodoc_default_options = {
+    "members": True,
+    "member-order": "bysource",
+    "show-inheritance": True,
+}
+autodoc_typehints = "description"
+always_document_param_types = True
+
+napoleon_google_docstring = True
+napoleon_numpy_docstring = True
+napoleon_use_param = True
+napoleon_use_rtype = True
+
+nitpicky = True

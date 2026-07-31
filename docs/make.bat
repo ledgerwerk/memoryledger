@@ -1,35 +1,22 @@
 @ECHO OFF
+SET SPHINXOPTS=-W --keep-going
+SET SPHINXBUILD=python -m sphinx
+SET SOURCEDIR=.
+SET BUILDDIR=_build
 
-pushd %~dp0
+IF "%1" == "clean" GOTO clean
+IF "%1" == "html" GOTO html
+GOTO help
 
-REM Command file for Sphinx documentation
+:html
+%SPHINXBUILD% %SPHINXOPTS% -b html "%SOURCEDIR%" "%BUILDDIR%\html"
+GOTO end
 
-if "%SPHINXBUILD%" == "" (
-	set SPHINXBUILD=sphinx-build
-)
-set SOURCEDIR=.
-set BUILDDIR=_build
-
-%SPHINXBUILD% >NUL 2>NUL
-if errorlevel 9009 (
-	echo.
-	echo.The 'sphinx-build' command was not found. Make sure you have Sphinx
-	echo.installed, then set the SPHINXBUILD environment variable to point
-	echo.to the full path of the 'sphinx-build' executable. Alternatively you
-	echo.may add the Sphinx directory to PATH.
-	echo.
-	echo.If you don't have Sphinx installed, grab it from
-	echo.https://www.sphinx-doc.org/
-	exit /b 1
-)
-
-if "%1" == "" goto help
-
-%SPHINXBUILD% -M %1 %SOURCEDIR% %BUILDDIR% %SPHINXOPTS% %O%
-goto end
+:clean
+rmdir /S /Q "%BUILDDIR%"
+GOTO end
 
 :help
-%SPHINXBUILD% -M help %SOURCEDIR% %BUILDDIR% %SPHINXOPTS% %O%
+ECHO Usage: make.bat [html^|clean]
 
 :end
-popd

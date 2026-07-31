@@ -12,9 +12,9 @@ status: accepted
 audience: null
 scopes: []
 source_refs:
-- git:6b590290f6f0d8876772e1c723a4235beb3f2633
+  - git:6b590290f6f0d8876772e1c723a4235beb3f2633
 paths:
-- memoryledger/project.py
+  - memoryledger/project.py
 issues: []
 prs: []
 sources: []

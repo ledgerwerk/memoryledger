@@ -19,15 +19,18 @@ from .storage import Store
 
 
 def global_config_path() -> Path:
+    """Return the user-level template configuration path."""
     base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     return base / "ledger" / "memoryledger.toml"
 
 
 def canonical_hash(content: str) -> str:
+    """Return the stable content hash used for template synchronization."""
     return hashlib.sha256((content.rstrip() + "\n").encode()).hexdigest()
 
 
 def load_global_config(path: Path | None = None) -> GlobalConfig:
+    """Load global templates from TOML without changing project state."""
     config_path = path or global_config_path()
     if not config_path.exists():
         return GlobalConfig(config_path)
@@ -74,6 +77,7 @@ def _parse_template(raw: dict[str, Any], root: Path) -> Template:
 
 
 def template_content(template: Template) -> str:
+    """Resolve inline or file-backed template content."""
     if bool(template.content) == bool(template.content_file):
         raise MemoryledgerError(
             "INVALID_TEMPLATE", "provide exactly one of content or content_file"
@@ -93,6 +97,7 @@ def template_content(template: Template) -> str:
 
 
 def find_template(config: GlobalConfig, template_id: str) -> Template:
+    """Find a configured template or raise a domain not-found error."""
     for template in config.templates:
         if template.id == template_id:
             return template
@@ -100,6 +105,7 @@ def find_template(config: GlobalConfig, template_id: str) -> Template:
 
 
 def apply_template(store: Store, template: Template) -> tuple[str, Memory]:
+    """Create or update a candidate from a template."""
     content = template_content(template)
     digest = canonical_hash(content)
     origin = f"template:{template.id}"
@@ -150,6 +156,7 @@ def apply_template(store: Store, template: Template) -> tuple[str, Memory]:
 
 
 def remove_template(store: Store, template_id: str, reason: str) -> Memory:
+    """Archive the memory associated with a template after a reasoned change."""
     matches = [
         memory
         for memory in store.all_memories()

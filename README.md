@@ -14,7 +14,7 @@ cat <<'EOF' | memoryledger memory create --kind rule --title "Use plans" --scope
 Always plan before implementation.
 EOF
 memoryledger review accept memory-0001 --reason "User approved project rule."
-memoryledger render --print
+memoryledger preview
 memoryledger export
 ```
 
@@ -38,7 +38,7 @@ Existing legacy projects migrate explicitly and copy-first:
 ```bash
 memoryledger migrate plan storage-layout
 memoryledger migrate apply storage-layout --dry-run
-memoryledger migrate recover --journal .ledger/migrations/<migration-id>.toml
+memoryledger migrate recover storage-layout --journal .ledger/migrations/<migration-id>.toml
 memoryledger migrate cleanup storage-layout --dry-run
 ```
 
@@ -75,7 +75,7 @@ memoryledger review accept memory-0001 --reason "User approved project memory wo
 memoryledger finalize --accept-all --reason "User approved project memory workflow." --export
 ```
 
-Additional intake commands are `templates list/show/apply/sync/remove`,
+Additional intake commands are `template list/show/apply/sync/remove`,
 `evidence scan`, and `import run-html`. All producer output remains candidate
 memory until explicit review. Structured evidence is managed with
 `memory evidence list/add`. Both `memoryledger` and `memledger` expose the same

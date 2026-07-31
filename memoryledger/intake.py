@@ -13,6 +13,7 @@ from .storage import Store
 
 
 def import_text(store: Store, text: str, source: str = "import") -> list[str]:
+    """Import safe text as candidate memories with source provenance."""
     body = text.strip()
     title = next(
         (line.strip("# ") for line in body.splitlines() if line.strip()),
@@ -32,6 +33,7 @@ def import_text(store: Store, text: str, source: str = "import") -> list[str]:
 
 
 def import_run_html(store: Store, path: Path) -> list[str]:
+    """Import safe excerpts from a run HTML file as candidates."""
     raw = path.read_text(errors="replace")
     proposals = decode_session(raw)
     if proposals is not None:

@@ -29,7 +29,7 @@ agent docs as generated artifacts.
 Never create or edit `AGENTS.md` directly. Never patch a generated linked agent
 document directly.
 
-Use memory records as the source of truth, then render and export.
+Use memory records as the source of truth, then build and export.
 
 ## Required workflow
 
@@ -78,10 +78,10 @@ list valid canonical values.
 Examples:
 
 - User: `build an AGENTS.md`
-  - Agent must: create memories, accept approved memories, render, export.
+  - Agent must: create memories, accept approved memories, build, export.
   - Agent must not: write `AGENTS.md` directly.
 - User: `add this to AGENTS.md`
-  - Agent must: create or update a memory record for the instruction, then render/export if approved.
+  - Agent must: create or update a memory record for the instruction, then build/export if approved.
   - Agent must not: patch `AGENTS.md`.
 
 ## Migrating an existing AGENTS.md

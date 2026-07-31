@@ -30,6 +30,8 @@ LONG_THRESHOLD = 500
 
 @dataclass(frozen=True)
 class RenderResult:
+    """Rendered root, linked, and nested documents before export."""
+
     root_text: str
     linked_docs: dict[str, str]
     nested_docs: dict[str, str]
@@ -99,6 +101,7 @@ def _format_evidence_ref(ref) -> str:
 
 
 def render_all(config: Config) -> RenderResult:
+    """Render eligible records deterministically without writing output."""
     store = Store(config)
     memories = _active(config, store.all_memories())
     linked: dict[str, list[tuple[Memory, str]]] = {}
@@ -289,6 +292,7 @@ def _render_nested(
 def write_rendered(
     config: Config, result: RenderResult, out: Path | None = None
 ) -> list[Path]:
+    """Write generated artifacts to the configured artifact destination."""
     written: list[Path] = []
     base = (
         (
@@ -323,6 +327,7 @@ def export(
     backup: bool = False,
     include_nested: bool = False,
 ) -> list[Path]:
+    """Export generated documents while protecting manual destinations."""
     targets: list[tuple[Path, str]] = [
         (out or config.root / config.render.root_agents_path, result.root_text)
     ]

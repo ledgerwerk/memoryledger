@@ -10,6 +10,8 @@ from .storage import Store
 
 @dataclass(frozen=True)
 class ScanProposal:
+    """Proposal derived from repository evidence; not accepted automatically."""
+
     scanner: str
     path: str
     fact_key: str
@@ -41,6 +43,7 @@ class ScanProposal:
 
 
 def scan(root: Path) -> list[ScanProposal]:
+    """Scan known repository configuration sources for evidence proposals."""
     proposals: list[ScanProposal] = []
     pyproject = root / "pyproject.toml"
     if pyproject.exists():
@@ -164,6 +167,7 @@ def _proposal(
 
 
 def apply(store: Store, proposals: list[ScanProposal]) -> list[dict[str, str]]:
+    """Apply scan proposals as candidate records with provenance."""
     results: list[dict[str, str]] = []
     by_origin = {memory.origin: memory for memory in store.all_memories()}
     for proposal in proposals:

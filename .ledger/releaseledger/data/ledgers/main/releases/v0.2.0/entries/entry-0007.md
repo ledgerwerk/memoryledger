@@ -12,9 +12,9 @@ status: accepted
 audience: null
 scopes: []
 source_refs:
-- git:b59d9524f48e52f4c42df104e652fbcc69a6e775
+  - git:b59d9524f48e52f4c42df104e652fbcc69a6e775
 paths:
-- .ledger/releaseledger/config.toml
+  - .ledger/releaseledger/config.toml
 issues: []
 prs: []
 sources: []

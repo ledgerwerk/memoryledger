@@ -57,19 +57,33 @@ from .templates import (
     template_content,
 )
 
-app = typer.Typer(no_args_is_help=True)
-memory_app = typer.Typer(no_args_is_help=True)
-evidence_app = typer.Typer(no_args_is_help=True)
-review_app = typer.Typer(no_args_is_help=True)
-import_app = typer.Typer(no_args_is_help=True)
-agents_app = typer.Typer(no_args_is_help=True)
-templates_app = typer.Typer(no_args_is_help=True)
-template_app = typer.Typer(no_args_is_help=True)
-scan_app = typer.Typer(no_args_is_help=True)
-schema_app = typer.Typer(no_args_is_help=True)
-migrate_app = typer.Typer(no_args_is_help=True)
-storage_app = typer.Typer(no_args_is_help=True)
-config_app = typer.Typer(no_args_is_help=True)
+app = typer.Typer(
+    no_args_is_help=True, help="Auditable long-term project memory ledger."
+)
+memory_app = typer.Typer(no_args_is_help=True, help="Create and manage memory records.")
+evidence_app = typer.Typer(
+    no_args_is_help=True, help="Manage memory evidence references."
+)
+review_app = typer.Typer(no_args_is_help=True, help="Review candidate memory records.")
+import_app = typer.Typer(no_args_is_help=True, help="Import memory candidates.")
+agents_app = typer.Typer(no_args_is_help=True, help="Run agent-oriented workflows.")
+templates_app = typer.Typer(
+    no_args_is_help=True, help="Deprecated template command aliases."
+)
+template_app = typer.Typer(no_args_is_help=True, help="Manage global memory templates.")
+scan_app = typer.Typer(no_args_is_help=True, help="Scan repository evidence.")
+schema_app = typer.Typer(
+    no_args_is_help=True, help="Inspect supported schemas and values."
+)
+migrate_app = typer.Typer(
+    no_args_is_help=True, help="Plan and apply storage migrations."
+)
+storage_app = typer.Typer(
+    no_args_is_help=True, help="Inspect storage topology and bindings."
+)
+config_app = typer.Typer(
+    no_args_is_help=True, help="Inspect and validate configuration."
+)
 app.add_typer(config_app, name="config")
 app.add_typer(memory_app, name="memory")
 memory_app.add_typer(evidence_app, name="evidence")
@@ -210,6 +224,7 @@ def status(
     check: bool = False,
     json_output: bool = typer.Option(False, "--json", hidden=True),
 ) -> None:
+    """Show project status and memory counts."""
     state = get_state(ctx)
     if json_output:
         state = CommonCLIState(
@@ -243,6 +258,7 @@ def status(
 def doctor(
     ctx: typer.Context, json_output: bool = typer.Option(False, "--json", hidden=True)
 ) -> None:
+    """Run read-only project health diagnostics."""
     state = get_state(ctx)
     if json_output:
         state = CommonCLIState(
@@ -268,6 +284,7 @@ def info(
     no_content: bool = False,
     json_output: bool = typer.Option(False, "--json", hidden=True),
 ) -> None:
+    """Show the project, storage, and Ledgercore inventory."""
     state = get_state(ctx)
     if json_output:
         state = CommonCLIState(
@@ -292,6 +309,7 @@ def info(
 
 @storage_app.command("where")
 def storage_where(ctx: typer.Context) -> None:
+    """Show resolved project, config, data, and artifact locations."""
     state = get_state(ctx)
     try:
         discovery = discover_storage(state.root)
@@ -319,8 +337,8 @@ def storage_where(ctx: typer.Context) -> None:
         _handle_error(exc, state)
 
 
-@storage_app.command("verify")
-@storage_app.command("validate", hidden=True)
+@storage_app.command("verify", hidden=True)
+@storage_app.command("validate")
 def storage_verify(
     ctx: typer.Context,
     strict: bool = typer.Option(False, "--strict"),
@@ -333,16 +351,14 @@ def storage_verify(
         validation_details = {}
         if discovery.status == "canonical" and strict:
             try:
+                from ledgercore import read_ledger_manifest
                 from ledgercore.config import locate_ledger_project
-                from ledgercore.layout import (
-                    parse_ledger_project_manifest,
-                    resolve_ledger_layout,
-                )
+                from ledgercore.layout import resolve_ledger_layout
                 from ledgercore.storage_binding import validate_ledger_layout_storage
 
                 locator = locate_ledger_project(state.root)
                 if locator and locator.manifest_path.exists():
-                    manifest = parse_ledger_project_manifest(locator.manifest_path)
+                    manifest = read_ledger_manifest(locator.manifest_path)
                     layout = resolve_ledger_layout(locator, manifest, "memoryledger")
                     report = validate_ledger_layout_storage(layout)
                     validation_details = {
@@ -370,7 +386,7 @@ def storage_verify(
         _handle_error(exc, state)
 
 
-@storage_app.command("migrate")
+@storage_app.command("migrate", hidden=True)
 def storage_migrate(
     dry_run: bool = typer.Option(False, "--dry-run"),
     plan_file: Path | None = typer.Option(None, "--plan-file"),
@@ -400,7 +416,7 @@ def storage_migrate(
         _handle_error(exc)
 
 
-@storage_app.command("recover")
+@storage_app.command("recover", hidden=True)
 def storage_recover(
     journal: Path = typer.Option(..., "--journal"),
     json_output: bool = typer.Option(False, "--json"),
@@ -423,7 +439,7 @@ def storage_recover(
         _handle_error(exc)
 
 
-@storage_app.command("cleanup-legacy")
+@storage_app.command("cleanup-legacy", hidden=True)
 def storage_cleanup_legacy(
     yes: bool = typer.Option(False, "--yes"),
     dry_run: bool = typer.Option(False, "--dry-run"),
@@ -458,6 +474,7 @@ def memory_create(
     render_target: str = typer.Option("root_agents", "--render-target"),
     section: str = typer.Option("", "--section"),
 ) -> None:
+    """Create a candidate memory record."""
     try:
         kind = _validate_choice("kind", kind, KINDS)
         scope = _validate_choice("scope", scope, SCOPES)
@@ -486,6 +503,7 @@ def memory_list(
     status: str | None = typer.Option(None, "--status"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """List memory records with optional kind and status filters."""
     try:
         _config, store = _load()
         items = [
@@ -509,6 +527,7 @@ def memory_show(
     content: bool = False,
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Show one memory record and optionally its body."""
     try:
         _config, store = _load()
         memory = store.get(memory_id)
@@ -526,7 +545,7 @@ def memory_show(
         _handle_error(exc)
 
 
-@memory_app.command("status")
+@memory_app.command("status", hidden=True)
 def memory_status(
     memory_id: str, status: str, reason: str = typer.Option(..., "--reason")
 ) -> None:
@@ -538,7 +557,7 @@ def memory_status(
         _handle_error(exc)
 
 
-@memory_app.command("edit")
+@memory_app.command("edit", hidden=True)
 def memory_edit(
     memory_id: str,
     reason: str = typer.Option(..., "--reason"),
@@ -565,6 +584,7 @@ def memory_append(
     file: Path | None = typer.Option(None, "--file"),
     stdin: bool = typer.Option(False, "--stdin"),
 ) -> None:
+    """Append content to an existing memory record."""
     try:
         _config, store = _load()
         memory = store.update_content(
@@ -579,6 +599,7 @@ def memory_append(
 def memory_validate(
     memory_id: str, json_output: bool = typer.Option(False, "--json")
 ) -> None:
+    """Validate one memory against storage and content guardrails."""
     try:
         _config, store = _load()
         memory = store.get(memory_id)
@@ -596,7 +617,7 @@ def memory_validate(
         _handle_error(exc)
 
 
-@memory_app.command("versions")
+@memory_app.command("versions", hidden=True)
 def memory_versions(
     memory_id: str, json_output: bool = typer.Option(False, "--json")
 ) -> None:
@@ -613,7 +634,7 @@ def memory_versions(
         _handle_error(exc)
 
 
-@memory_app.command("diff")
+@memory_app.command("diff", hidden=True)
 def memory_diff(
     memory_id: str,
     from_version: str = typer.Option(..., "--from"),
@@ -633,6 +654,7 @@ def memory_diff(
 def evidence_list(
     memory_id: str, json_output: bool = typer.Option(False, "--json")
 ) -> None:
+    """List evidence references attached to a memory."""
     try:
         _config, store = _load()
         refs = [ref.to_dict() for ref in store.get(memory_id).evidence_refs]
@@ -657,6 +679,7 @@ def evidence_add(
     line_end: int | None = typer.Option(None, "--line-end"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Add a reviewed evidence reference to a memory."""
     try:
         if kind not in EVIDENCE_KINDS:
             raise MemoryledgerError("INVALID_EVIDENCE_KIND", kind)
@@ -681,6 +704,7 @@ def evidence_add(
 
 @review_app.command("list")
 def review_list(json_output: bool = typer.Option(False, "--json")) -> None:
+    """List candidate memories awaiting review."""
     return memory_list(status="candidate", json_output=json_output)
 
 
@@ -708,6 +732,7 @@ def review_accept(
     reason: str = typer.Option(..., "--reason"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Accept one candidate or all candidates with a reason."""
     try:
         if all_candidates:
             _review_bulk("accepted", reason, json_output)
@@ -728,6 +753,7 @@ def review_reject(
     reason: str = typer.Option(..., "--reason"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Reject one candidate or all candidates with a reason."""
     try:
         if all_candidates:
             _review_bulk("rejected", reason, json_output)
@@ -741,12 +767,12 @@ def review_reject(
         _handle_error(exc)
 
 
-@review_app.command("archive")
+@review_app.command("archive", hidden=True)
 def review_archive(memory_id: str, reason: str = typer.Option(..., "--reason")) -> None:
     memory_status(memory_id, "archived", reason)
 
 
-@app.command()
+@app.command(hidden=True)
 def render(
     out: Path | None = None,
     print_output: bool = typer.Option(False, "--print"),
@@ -781,6 +807,7 @@ def export(
     backup: bool = False,
     include_nested: bool = False,
 ) -> None:
+    """Export generated artifacts to configured user/workspace destinations."""
     try:
         config, _store = _load()
         result = render_all(config)
@@ -805,6 +832,7 @@ def finalize(
     include_nested: bool = False,
     out: Path | None = None,
 ) -> None:
+    """Accept candidates, build artifacts, and optionally export them."""
     try:
         config, store = _load()
         accepted: list[str] = []
@@ -849,7 +877,7 @@ def finalize(
         _handle_error(exc)
 
 
-@migrate_app.command("storage-v2")
+@migrate_app.command("storage-v2", hidden=True)
 def migrate_storage_v2(
     plan: bool = typer.Option(False, "--plan"),
     apply: bool = typer.Option(False, "--apply"),
@@ -875,7 +903,7 @@ def migrate_storage_v2(
         _handle_error(exc)
 
 
-@migrate_app.command("linked-docs-dir")
+@migrate_app.command("linked-docs-dir", hidden=True)
 def migrate_linked_docs_dir(
     from_dir: str = typer.Option("docs/agents", "--from"),
     to_dir: str = typer.Option("agent_docs", "--to"),
@@ -902,6 +930,7 @@ def migrate_linked_docs_dir(
 
 @agents_app.command("plan")
 def agents_plan(json_output: bool = typer.Option(False, "--json")) -> None:
+    """Print the canonical agent workflow commands."""
     data = {
         "commands": [
             "memoryledger preview --output -",
@@ -914,12 +943,12 @@ def agents_plan(json_output: bool = typer.Option(False, "--json")) -> None:
     )
 
 
-@agents_app.command("render")
+@agents_app.command("render", hidden=True)
 def agents_render(json_output: bool = typer.Option(False, "--json")) -> None:
     render(json_output=json_output)
 
 
-@agents_app.command("export")
+@agents_app.command("export", hidden=True)
 def agents_export(json_output: bool = typer.Option(False, "--json")) -> None:
     export(json_output=json_output)
 
@@ -933,6 +962,7 @@ def agents_adopt(
     reason: str = typer.Option("", "--reason"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Preview or apply safe adoption of an existing AGENTS.md."""
     try:
         config, store = _load()
         path = target if target.is_absolute() else config.root / target
@@ -973,6 +1003,7 @@ def agents_adopt(
 
 @schema_app.command("values")
 def schema_values(json_output: bool = typer.Option(False, "--json")) -> None:
+    """Show supported enum values and aliases."""
     data = _schema_values()
     if json_output:
         _json(data)
@@ -986,6 +1017,7 @@ def agents_verify_adoption(
     source: Path = typer.Option(..., "--source"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Verify adopted memories against an AGENTS.md source."""
     try:
         config, store = _load()
         path = source if source.is_absolute() else config.root / source
@@ -1009,6 +1041,7 @@ def agents_verify_adoption(
 
 @templates_app.command("list")
 def templates_list(json_output: bool = typer.Option(False, "--json")) -> None:
+    """List configured global templates."""
     try:
         templates = load_global_config().templates
         data = [
@@ -1028,6 +1061,7 @@ def templates_list(json_output: bool = typer.Option(False, "--json")) -> None:
 def templates_show(
     template_id: str, json_output: bool = typer.Option(False, "--json")
 ) -> None:
+    """Show one configured template."""
     try:
         template = find_template(load_global_config(), template_id)
         data = {
@@ -1069,6 +1103,7 @@ def templates_apply(
     reason: str = typer.Option("", "--reason"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Apply a configured template to the project ledger."""
     try:
         _template_apply(template_id, json_output, accept=accept, reason=reason)
     except Exception as exc:
@@ -1082,6 +1117,7 @@ def templates_sync(
     reason: str = typer.Option("", "--reason"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Synchronize a configured template with the project ledger."""
     try:
         _template_apply(template_id, json_output, accept=accept, reason=reason)
     except Exception as exc:
@@ -1094,6 +1130,7 @@ def templates_remove(
     reason: str = typer.Option(..., "--reason"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Archive the memory created by a configured template."""
     try:
         _config, store = _load()
         memory = remove_template(store, template_id, reason)
@@ -1108,6 +1145,7 @@ def evidence_scan(
     apply_candidates: bool = typer.Option(False, "--apply-candidates"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Scan repository configuration for proposal-only evidence."""
     try:
         config, store = _load()
         proposals = scan_evidence(config.root)
@@ -1135,6 +1173,7 @@ def import_text_cmd(
     stdin: bool = typer.Option(False, "--stdin"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Import text as candidate memory records."""
     try:
         _config, store = _load()
         ids = intake_text(store, _read_input(text, file, stdin))
@@ -1148,6 +1187,7 @@ def import_run_html_cmd(
     file: Path = typer.Option(..., "--file"),
     json_output: bool = typer.Option(False, "--json"),
 ) -> None:
+    """Import candidate memories from a run HTML file."""
     try:
         _config, store = _load()
         ids = intake_run_html(store, file)
@@ -1158,6 +1198,7 @@ def import_run_html_cmd(
 
 @import_app.command("current-run")
 def import_current_run(json_output: bool = typer.Option(False, "--json")) -> None:
+    """Report whether current-run import is available in this runtime."""
     data = {
         "ok": False,
         "unsupported": True,
@@ -1343,7 +1384,7 @@ def commands(ctx: typer.Context) -> None:
     emit_success(
         state,
         "commands",
-        result={"commands": CATALOG.to_dict()},
+        result={"commands": [entry.as_mapping() for entry in CATALOG.entries]},
         human_output=CATALOG.human_table(),
     )
 
@@ -1500,7 +1541,7 @@ def config_show(ctx: typer.Context) -> None:
             "project_uuid": config.project_uuid,
             "ledger_code": config.ledger_code,
             "render": {
-                "root_section": config.render.root_section,
+                "sort_order": config.render.sort_order,
             },
         }
         human = "\n".join(f"{k}: {v}" for k, v in result.items())

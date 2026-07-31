@@ -7,6 +7,7 @@ from .storage import Store
 
 
 def transition(store: Store, memory_id: str, status: str, reason: str) -> Memory:
+    """Apply a reasoned lifecycle transition and return the updated memory."""
     if status not in STATUSES:
         raise MemoryledgerError("INVALID_STATUS", f"Invalid status: {status}")
     if not reason.strip():

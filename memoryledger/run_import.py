@@ -65,6 +65,8 @@ RAW_TRANSCRIPT_MARKERS = (
 
 @dataclass(frozen=True)
 class RunProposal:
+    """A candidate proposal extracted from an agent run."""
+
     entry_id: str
     entry_type: str
     text: str
@@ -124,6 +126,7 @@ def _classify(entry_type: str, text: str) -> RunProposal | None:
 
 
 def decode_session(html: str) -> list[RunProposal] | None:
+    """Decode supported run-session content into safe candidate proposals."""
     if len(html.encode()) > MAX_HTML_BYTES:
         raise MemoryledgerError("RUN_TOO_LARGE", "run HTML exceeds size limit")
     match = SESSION_RE.search(html)

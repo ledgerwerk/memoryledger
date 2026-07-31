@@ -31,6 +31,7 @@ def _load_canonical(start: Path) -> Any:
 
 
 def resolve_canonical_workspace(start: Path, loaded: Any | None = None) -> Workspace:
+    """Resolve and validate the registered schema-3 workspace without writes."""
     loaded_project = loaded or _load_canonical(start)
     manifest = loaded_project.manifest  # type: ignore[attr-defined]
     registration = manifest.ledgers.get(TOOL_NAME)
@@ -89,6 +90,7 @@ def resolve_canonical_workspace(start: Path, loaded: Any | None = None) -> Works
 def resolve_workspace(
     start: Path | None = None, *, allow_legacy: bool = True
 ) -> Workspace:
+    """Discover the canonical workspace, optionally falling back to legacy data."""
     root = (start or Path.cwd()).resolve()
     locator = ledgercore.locate_ledger_project(
         root, legacy_tool_filenames=("memoryledger.toml", ".memoryledger.toml")
@@ -217,6 +219,7 @@ def ensure_artifacts(workspace: Workspace) -> Path:
 
 
 def discover_storage(start: Path | None = None) -> StorageDiscovery:
+    """Return a non-mutating report for canonical, legacy, or invalid storage."""
     root = (start or Path.cwd()).resolve()
     locator = ledgercore.locate_ledger_project(
         root, legacy_tool_filenames=("memoryledger.toml", ".memoryledger.toml")

@@ -139,6 +139,7 @@ def _parse_template_policy(data: dict[str, Any]) -> TemplatePolicy:
 
 
 def default_config_text(project_name: str, memoryledger_dir: str) -> str:
+    """Render legacy-compatible configuration text for initialization or migration."""
     project_uuid = str(uuid.uuid4())
     return f'''[ledger]
 code = "ml"
@@ -171,6 +172,7 @@ default_review_status = "candidate"
 
 
 def find_config(start: Path | None = None) -> Path | None:
+    """Find a supported project configuration walking upward from a path."""
     current = (start or Path.cwd()).resolve()
     for directory in (current, *current.parents):
         for name in CONFIG_NAMES:
@@ -287,6 +289,8 @@ def ensure_storage(config: Config) -> None:
 
 
 class Store:
+    """Read and mutate durable memory records in a resolved workspace."""
+
     def __init__(self, config: Config) -> None:
         self.config = config
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol, runtime_checkable
+import builtins
 
 
 @runtime_checkable
@@ -76,11 +77,11 @@ class MigrationRegistry:
             raise ValueError(f"Unknown migration '{name}'. Valid: {valid}")
         return self._handlers[name]
 
-    def list(self) -> list[Mapping[str, object]]:
+    def list(self) -> builtins.list[Mapping[str, object]]:
         """List all registered migrations."""
         return [{"name": h.name, "summary": h.summary} for h in self._handlers.values()]
 
-    def status(self, root: Path) -> list[Mapping[str, object]]:
+    def status(self, root: Path) -> builtins.list[Mapping[str, object]]:
         """Get status for all migrations."""
         results = []
         for handler in self._handlers.values():

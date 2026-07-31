@@ -71,6 +71,8 @@ def _record_version(path: Path) -> tuple[str, int]:
 
 @dataclass(frozen=True)
 class MigrationPlan:
+    """Deterministic copy-first plan for a legacy-to-canonical migration."""
+
     migration_id: str
     root: Path
     source_config: Path
@@ -232,6 +234,7 @@ def _layout_for_manifest(root: Path, manifest: LedgerProjectManifest):
 def build_plan(
     start: Path | None = None, *, adopt_project_uuid: bool = False
 ) -> MigrationPlan:
+    """Build and validate a migration plan without activating it."""
     root = (start or Path.cwd()).resolve()
     source_config = find_legacy_config(root)
     if source_config is None:
@@ -349,6 +352,7 @@ def build_plan(
 
 
 def write_plan(plan: MigrationPlan, path: Path | None = None) -> Path:
+    """Serialize a migration plan to a deterministic TOML file."""
     target = path or plan.root / ".memoryledger-migration-plan.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
@@ -373,6 +377,7 @@ def _journal(plan: MigrationPlan, phase: str) -> None:
 def apply_plan(
     plan: MigrationPlan, *, adopt_project_uuid: bool = False
 ) -> dict[str, object]:
+    """Apply a validated migration plan with copy-first activation semantics."""
     if plan.conflicts:
         raise MemoryledgerError("STORAGE_MIGRATION_CONFLICT", "; ".join(plan.conflicts))
     stage = plan.root / ".ledger" / "migrations" / plan.migration_id / "stage"
@@ -443,6 +448,7 @@ def apply_plan(
 
 
 def recover_plan(plan: MigrationPlan) -> dict[str, object]:
+    """Recover an incomplete migration from its journal."""
     journal = _journal_path(plan)
     if not journal.is_file():
         raise MemoryledgerError(
@@ -459,6 +465,7 @@ def recover_plan(plan: MigrationPlan) -> dict[str, object]:
 def cleanup_legacy(
     plan: MigrationPlan, *, confirm: bool = False, discard_rendered: bool = False
 ) -> dict[str, object]:
+    """Plan or perform confirmed cleanup after successful migration."""
     state = recover_plan(plan)
     if state.get("phase") != "complete":
         raise MemoryledgerError(

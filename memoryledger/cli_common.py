@@ -9,7 +9,7 @@ common input-source validation, and provide helpers for legacy command-local
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +42,7 @@ def resolve_global_state(
 def emit_success(
     state: CommonCLIState,
     command: str,
-    result: dict[str, object] | None = None,
+    result: Mapping[str, object] | None = None,
     events: tuple[dict[str, object], ...] = (),
     human_output: str | None = None,
 ) -> None:

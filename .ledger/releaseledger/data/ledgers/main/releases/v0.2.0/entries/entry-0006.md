@@ -12,9 +12,9 @@ status: accepted
 audience: null
 scopes: []
 source_refs:
-- git:80377fa2340ff08137ee027de9a5c029b5071f07
+  - git:80377fa2340ff08137ee027de9a5c029b5071f07
 paths:
-- memoryledger/command_catalog.py
+  - memoryledger/command_catalog.py
 issues: []
 prs: []
 sources: []
